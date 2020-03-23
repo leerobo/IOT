@@ -3,7 +3,7 @@
 # ----------------------------------------------------------------------------
 #  IOTpoll cycles thru the connected pins and returns back to Promethus server 
 #          the settings,  An API gateway allows grafana pages to switch relays
-#           if required
+#          if required
 #    
 #    To Set : View Readme.txt in folder
 #
