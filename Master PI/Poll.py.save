@@ -1,0 +1,195 @@
+#!/usr/bin python3
+
+import RPi.GPIO as GPIO
+import configparser 
+import time
+import http.client
+import json
+
+import sys
+import os
+import time
+import datetime
+import glob
+import socket
+from array import array
+
+Ddir='/sys/bus/w1/devices/'
+RelayPINS = [5, 6, 13, 19, 26, 16, 20, 21 ]
+config = configparser.ConfigParser()
+SIDlist={}
+
+def Wire1CNTL(tsk,id,fmt):
+    if tsk == 'GET':
+        if id == "-1":
+            return GETwire1()
+        else:
+            DS18B20 = GETtemp(id)
+            if fmt=="FULL" :
+               return id+'#'+str(DS18B20)
+                return str(DS18B20)
+            else:
+                return DS18B20
+
+def GETwire1():
+    TotWIRE1=''
+    devicelist = glob.glob(Ddir+'28*')    
+    if devicelist=='':
+        print('Empty')
+        return TotWIRE1
+    else:
+        for device in devicelist:
+            TT=device.split("/")
+            SID = TT[len(TT)-1]
+            TotWIRE1+=SID+'#'
+            SIDlist[SID]=0
+        #   TotWIRE1.append(SID)
+    return TotWIRE1
+
+def GETtemp(SID):
+    devicefile=Ddir+SID+'/w1_slave'
+    try:
+        fileobj = open(devicefile,'r')
+        lines = fileobj.readlines()
+        fileobj.close()
+    except:
+        return devicefile+" Not Found"
+
+    # get the status from the end of line 1 
+    status = lines[0][-4:-1]
+
+    # is the status is ok, get the temperature from line 2
+    if status=="YES":
+        equals_pos = lines[1].find('t=')
+        temp_string = lines[1][equals_pos+2:]
+        tempvalue=float(temp_string)/1000
+        return tempvalue
+    else:
+        return "Device "+str(SID)+" Returned Read Error"
+
+def RELAYcntl(tsk,id):
+    if tsk == "GET":
+        if id != "-1":
+            return RelayGET(id)
+        else:
+            return(RelaySET())
+    else:
+        if id != 0:
+            return RelayPUT(id)
+
+#Return available RELAYs pins
+def RelaySET():
+    GPIO.setwarnings(False) 
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(RelayPINS, GPIO.OUT)
+    # GPIO.output(RelayPINS, GPIO.HIGH)
+    return RelayPINS
+
+# Return Pin ON/OFF status
+def RelayGET(PIN):
+    GPIO.setwarnings(False) 
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(int(PIN), GPIO.OUT)
+    if GPIO.input(int(PIN)):
+        return 1     
+    else:
+        return 0
+
+# Toggle Pin
+def RelayPUT(PIN):
+    GPIO.setwarnings(False) 
+    GPIO.setmode(GPIO.BCM)
+    RLYpin=RelayPINS[int(PIN)]
+    GPIO.setup(int(RLYpin), GPIO.OUT)
+    if GPIO.input(RLYpin):
+       GPIO.output(RLYpin, GPIO.LOW)
+       return 0
+    else:
+       GPIO.output(RLYpin, GPIO.HIGH)
+       return 1
+
+# Toggle Pin
+def PushGateway(SidType,sid):
+    sids=sid.split("#")
+    if sids[0] in config["SID"]:
+        sidname=config["SID"][sids[0]] 
+    else:
+        sidname=sids[0]
+    #print(sids[0],sidname,sids[1])
+
+    headers = {"Content-type":  "text/plain","version":"0.0.4"}
+    url="/metrics/RPI/"+SidType
+    JSx=[{"MID":config["RPI"]["name"],"LID":config["RPI"]["location"],"SID":sidname,"Value":sids[1]}]
+    try:
+        Body = json.dumps(JSx) 
+        h4 = http.client.HTTPConnection(config["POLL"]["server"], config["POLL"]["port"],timeout=5)
+        h4.request("POST", url,Body,headers)
+        rsp=h4.getresponse()
+        return 0        
+    except:
+        print("Could Not Connect : " , config["POLL"]["server"])    
+        return 1
+   
+# main function
+# Arg1 = R1(relays) or W1(Wire-1) 
+# Arg2 = Get/Put
+# Arg3 = Relay number 0-7 or SID or nothing
+def main():
+    rid=0
+    StopLoop=False
+    config.read('Pnode.ini')
+    if not config["POLL"]["Time"]:
+        config["POLL"]["Time"] = 15
+
+    print("Polling Set : ",config["POLL"]["Time"]," Seconds")
+    print("location    : ",config["RPI"]["location"])
+    print("name        : ",config["RPI"]["name"])
+    # print("Sensors     : ",config["SID"])
+
+    sidy=Wire1CNTL("GET","-1","")
+    for k, v in SIDlist.items():
+       print('Sensor ' + k + '(' + config["SID"][k] +') Online'  )
+
+    while StopLoop==False:
+        # mainloop()
+        #sidy=Wire1CNTL("GET","-1","") # Hold Sensor IDs
+        #sidv=[]                       # Hold Values
+        for k,v in SIDlist.items():
+            sidr=Wire1CNTL("GET",k,"FULL")
+            if sidr != SIDlist[k]:
+               print(str(sidr)+' - '+k+' - '+str(SIDlist[k]))
+               SIDlist[k]=sidr
+               Rid=PushGateway("WIRE1",sidr)    # Wire1 Temp settings
+
+        time.sleep(int(config["POLL"]["Time"]))
+        # StopLoop=True
+
+def mainloop():
+
+    # for arg in sys.argv:
+    #    print(arg)
+
+    if len(sys.argv) <= 2:
+       print("POLL:Invalid parms")
+    else:
+        if sys.argv[1] == "R1":
+            if len(sys.argv) == 3:
+                rtn=RELAYcntl(sys.argv[2],"-1")
+            else:
+                rtn=RELAYcntl(sys.argv[2],sys.argv[3])
+            print(rtn)
+
+        if sys.argv[1] == "W1":
+            fmt=''
+            if len(sys.argv) == 5: 
+                fmt=sys.argv[4]
+            if len(sys.argv) == 3:
+                rtn=Wire1CNTL(sys.argv[2],"-1","")
+            else:
+                rtn=Wire1CNTL(sys.argv[2],sys.argv[3],fmt)
+            print(rtn)
+
+    sys.stdout.flush()  
+
+if __name__=="__main__":
+    main()

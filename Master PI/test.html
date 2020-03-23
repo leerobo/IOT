@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+
+<head lang="en">
+    <meta charset="UTF-8">
+    <title>Stockholm</title>
+    <meta http-equiv="Access-Control-Allow-Origin" content="*"/>
+    <meta http-equiv="Access-Control-Allow-Headers" content="X-Requested-With" />
+</head>
+
+<body>
+  <div class="navbar-buttons navbar-buttons--actions"><button class="btn navbar-button navbar-button--add-panel"><i class="gicon gicon-add-panel"></i></button><button class="btn navbar-button navbar-button--star"><i class="fa fa-star"></i></button><button class="btn navbar-button navbar-button--share"><i class="fa fa-share-square-o"></i></button><button class="btn navbar-button navbar-button--save"><i class="fa fa-save"></i></button><button class="btn navbar-button navbar-button--settings"><i class="gicon gicon-cog"></i></button></div>
+  
+    <button class="btn navbar-button gf-timepicker-nav-btn" style="width: 25%" onClick="RelayToggle(5)">Relay 5</button>
+    <button class="btn navbar-button gf-timepicker-nav-btn" style="width: 25%" onClick="RelayToggle(6)">Relay 6</button>
+    <button class="btn navbar-button gf-timepicker-nav-btn" style="width: 25%" onClick="RelayToggle(13)">Relay 13</button>
+    <button class="btn navbar-button gf-timepicker-nav-btn" style="width: 25%" onClick="RelayToggle(19)">Relay 19</button>
+    
+    <p id="output"></p>
+
+  </div>
+
+  <script>
+    function RelayToggle(rlyno) {
+      var xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = function() {
+        var tt = document.getElementById("output");
+        tt.innerText=this.readystate+' - '+this.status
+
+         if (this.readyState == 4 && this.status == 200) {
+             alert(this.responseText);
+         }
+      };
+      xhttp.open("GET", "http://bollnas.myqnapcloud.com:18100?TYP=RELAY&RLY="+rlyno+'&API=3jnfjk3kfl4', true);
+      xhttp.setRequestHeader("Content-type", "text/plain");
+      xhttp.send();
+  }
+</script>
+   
+</body>
+
+</html>

@@ -1,0 +1,12 @@
+# place into /etc/systemd/system
+[Unit]
+Description=Pnode Api
+Wants=network-online.target
+After=network-online.target
+[Service]
+User=root
+Group=root
+Type=simple
+ExecStart=/home/leerobo/prometheus/Pnode.py
+[Install]
+WantedBy=multi-user.target
