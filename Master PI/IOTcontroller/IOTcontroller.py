@@ -203,12 +203,20 @@ class gpioHTTPServer_RequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         SendMSG('------------------------------ GET')
+        ftrTXT=open('Footer.html','r+')
+        pageTYP,Rsn=APIincoming(self)
+
         self.send_response(200)
-        self.send_header('Content-type','text/plain')
+        if pageTYP=='JSON':
+            self.send_header('application/json')
+            Rply = Rsn
+        else:
+            self.send_header('Content-type','text/html')
+            hdrTXT=open('Header.html','r+')
+            Rply = hdrTXT.read()+Rsn+ftrTXT.read()
+
         self.end_headers()
-        Rsn=APIincoming(self)   
-        self.wfile.write(bytes(Rsn, "utf8"))
-        SendMSG('------------------------------ GET (END)')
+        self.wfile.write(bytes(Rply, "utf8"))
         return
 
     def do_POST(self):
@@ -235,29 +243,50 @@ def APIsensors():
             print(song2)
 
 # ----------------------------------------------------------------------
+#   Decode the URL into simple Array and Dict of parms
+# ----------------------------------------------------------------------
+
+def DecodeURL(URLtxt):
+    Ux= URLtxt.split('?')
+    UParms = {}
+    Uarr=()
+    print(URLtxt)
+
+    if Ux[0] == '/':  #No Url no Parms (Index)
+        return Uarr,UParms
+
+    if len(Ux) > 0:
+        if Ux[0][0:1] == '/':
+            Uarr=Ux[0].split('/')
+            print(Uarr)
+
+    if len(Ux) == 2 or len(Ux) == 1 and Ux[0][0:1] != '/':
+        if len(Ux) == 2 :
+            Uprm=Ux[1].split('&')
+        else:
+            Uprm=Ux[0].split('&')
+        for Uprms in Uprm:
+            print(Uprms)
+            Upp=Uprms.split('=')
+            UParms[Upp[0]]=Upp[1]
+        
+    return Uarr,UParms
+
+# ----------------------------------------------------------------------
 #    Incoming API handler 
 # -----------------------------------------------------------------------
 
 
 def APIincoming(self):
-    print(self.path)
-    print('----')
-    pp=self.path.split('/')
-    print(pp)
-    print('----')
     LOGmsgs('A001','M',self.address_string()+':'+self.path+':'+self.command)
+    URLlvl,URLparm = DecodeURL(self.path)
 
-    if 'CANDY' not in pp:
-        LOGmsgs('0001','S','Security Key Invalid')
-        return 'Security Volation'
+    if len(URLlvl) == 0:   # Return Index if requried here 
+        bdyTXT=open('bdyTXT.html','r+')
+        return 'HTML',bdyTXT.read()
 
-    if 'TYP' in qsp:
-        if qsp['TYP']=='RLY':
-            return apiRELAY(qsp)
-
-        return 'Support Types (RLY,SWT,MON)'
-    else:
-        return 'Missing Task'
+    # Place here different URLlvl 
+    return 'HTML','<body><hdr>Missing Task</hdr></body>'
 
 # WirePush notifications
 
