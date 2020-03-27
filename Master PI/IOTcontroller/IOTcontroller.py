@@ -15,7 +15,8 @@
 #
 #    Parm : CONTROL.ini
 #
-#    V 0.0.1 - Mar 2002 - Initial coding 
+#    V 0.0.1 - Mar 2020 - Initial coding 
+#    V 0.0.2 - Apr 2020 - Add support for ZigBee deconz REST api
 #  
 # ----------------------------------------------------------------------------
 
@@ -23,6 +24,13 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pynetgear import Netgear
 import requests
 from gpiozero import LED, Button
+
+import websocket
+try:
+    import thread
+except ImportError:
+    import _thread as thread
+import time
 
 from urllib import parse
 from gpiozero import LED
@@ -66,6 +74,7 @@ PollGAP = 10   # Poll Gap between checking sensors
 
 ActDEV=[]
 PrvDEV=[]
+
 
 #KillSwitch = True
 #POLLlst={"DEF":0}
@@ -146,39 +155,20 @@ def ValidatePARMS():
         Alarm=LED(cntlINI["SETTINGS"]["Alarm"])
         SendMSG("Alarm on Pin "+cntlINI["SETTINGS"]["Alarm"])
 
-    if "Button" in cntlINI["SETTINGS"]:
-        ButtonOV=Button(cntlINI["SETTINGS"]["Button"])
-        SendMSG("Button on Pin "+cntlINI["SETTINGS"]["Button"])
-
-    if "Bedroom1" in cntlINI["SETTINGS"]:
-        Sensors[0]=cntlINI["SETTINGS"]["Bedroom1"]
-        SendMSG("BedRoom1 Sensor on Pin "+cntlINI["SETTINGS"]["Bedroom1"])
-    if "Bedroom2" in cntlINI["SETTINGS"]:
-        Sensors[1]=cntlINI["SETTINGS"]["Bedroom2"]
-        SendMSG("BedRoom2 Sensor on Pin "+cntlINI["SETTINGS"]["Bedroom2"])
-    if "Bathroom" in cntlINI["SETTINGS"]:
-        Sensors[2]=cntlINI["SETTINGS"]["Bathroom"]
-        SendMSG("Bathroom Sensor on Pin "+cntlINI["SETTINGS"]["Bathroom"])
-        
-    if Sensors[0] == 0 and Sensors[1] == 0:
-        SendMSG("WARNING : No BedRoom Sensors Set")
-    if Sensors[2] == 0 :
-        SendMSG("WARNING : No Bathroom Sensors Set")
-
-
     TEMPtrig=21
     HUMtrig=80
     if "TEMPtrig" in cntlINI["SETTINGS"]:
         TEMPtrig=cntlINI["SETTINGS"]["TEMPtrig"]
     SendMSG("Temp Trigger "+str(TEMPtrig))
-
     if "HUMtrig" in cntlINI["SETTINGS"]:
         HUMtrig=cntlINI["SETTINGS"]["HUMtrig"]
     SendMSG("Hum Trigger "+str(HUMtrig)) 
-    PollGAP=30
-    if "Poll" in cntlINI["SETTINGS"]:
-        PollGAP=int(cntlINI["SETTINGS"]["Poll"])
-    SendMSG("Poll Gap "+str(PollGAP)+" Seconds")
+
+    # ZigBee
+    if cntlINI["ZIGBEE"]["key"] == '':
+        SendMSG("ZigBee Key Missing ")
+        return True
+    SendMSG("ZigBee "+str(cntlINI["ZIGBEE"]["ip"])+" : "+str(cntlINI["ZIGBEE"]["key"] ))
 
     return False
 
@@ -231,16 +221,46 @@ class gpioHTTPServer_RequestHandler(BaseHTTPRequestHandler):
 #  API CALLS
 # ----------------------------------------------------------------------
 
-def APIsensors():
+def ZBsetup():
+    global ZBconfig, ZBsensors
     params = {"words": 10, "paragraphs": 1, "format": "json"}
-    response = requests.get(f"http://192.168.2.2/api/236FAB4DA9/sensors/")
-    print (type(response.json()))
-    print(response.json())
+    response = requests.get(f"http://"+cntlINI["ZIGBEE"]["ip"]+"/api/"+cntlINI["ZIGBEE"]["key"]+"/sensors/")
+    if response.status_code != 200:
+        print("ZigBee Return Error : "+str(response.status_code))
+        return True
+    ZBSensors=response.json()
+    print("ZigBee Sensors Set")
+  
+    params = {"words": 10, "paragraphs": 1, "format": "json"}
+    response = requests.get(f"http://"+cntlINI["ZIGBEE"]["ip"]+"/api/"+cntlINI["ZIGBEE"]["key"]+"/config")
+    if response.status_code != 200:
+        print("ZigBee Return Error : "+str(response.status_code))
+        return True
+    ZBconfig=response.json()
+    print("ZigBee Config Set")
+ 
+# ----------------------------------------------------------------------
+#   ZigBee DeCONz WebSocket Setup
+# ----------------------------------------------------------------------
 
-    for song in response.json():   
-        print(song)
-        for song2 in song:  
-            print(song2)
+def WBws_message(ws, message):
+    print(message)
+
+def WBws_error(ws, error):
+    print(error)
+
+def WBws_close(ws):
+    print("### closed ###")
+
+def WBws_open(ws):
+    def run(*args):
+        for i in range(3):
+            time.sleep(1)
+            ws.send("Hello %d" % i)
+        time.sleep(1)
+        ws.close()
+        print("thread terminating...")
+    thread.start_new_thread(run, ())
 
 # ----------------------------------------------------------------------
 #   Decode the URL into simple Array and Dict of parms
@@ -373,7 +393,10 @@ def LOGmsgs(trc,typ,msg):
    # ---------------------------------------------------------------------------
 
 def main():
-    ValidatePARMS()   #  Load in control Parms
+    if ValidatePARMS():   #  Load in control Parms
+        return
+    if ZBsetup():         #  Setup deConz ZigBee
+        return 
 
     # Start API Server 
     server_address = ('', 18101)
@@ -382,19 +405,32 @@ def main():
     httpd.handle_request()
     SendMSG('IOTcontroller API running on 18101')
 
-    while 1:
-        #CheckSENSORS()
-        #if Router:
-        #    CheckROUTER()
+    # ------------------------------------------------------------------------------
+    #   Start WebSocket for event actions of sensors
+    # ------------------------------------------------------------------------------
+    websocket.enableTrace(True)
+    WBzbIP="ws://"+cntlINI["ZIGBEE"]["ip"]+":"+str(ZBconfig["websocketport"])
+    WBws = websocket.WebSocketApp(WBzbIP,
+                              on_message = WBws_message,
+                              on_error = WBws_error,
+                              on_close = WBws_close)
+    WBws_onopen = WBws_open
+    WBws.run_forever()
 
-        GapCnt=0
-        while GapCnt <= PollGAP:
-            httpd.handle_request() # Poll API Getway
-            if ButtonOV:
-                Button.wait_for_press(1) 
-            else:
-                time.sleep(1)
-            GapCnt+=1
+    # while 1:
+    #     #CheckSENSORS()
+    #     #if Router:
+    #     #    CheckROUTER()
+
+    #     GapCnt=0
+    #     while GapCnt <= PollGAP:
+    #         httpd.handle_request() # Poll API Getway
+    #         if ButtonOV:
+    #             Button.wait_for_press(1) 
+    #         else:
+    #             time.sleep(1)
+    #         GapCnt+=1
 
 if __name__=="__main__":
     main()
+
