@@ -108,11 +108,16 @@ class ZBsensors:
             Prtlne=Prtlne+' (Bat:'+str(self.ids[ZBid]['config']['battery'])+'%) ' 
         if 'state' in self.ids[ZBid]:
             if 'temperature' in self.ids[ZBid]['state']:
-                Prtlne=Prtlne+' (Temp:'+str(self.ids[ZBid]['state']['temperature']) 
+                Prtlne=Prtlne+' (Temp:'+str(int(self.ids[ZBid]['state']['temperature']/100))+') '
             if 'humidity' in self.ids[ZBid]['state']:
-                Prtlne=Prtlne+' (Hum:'+str(self.ids[ZBid]['state']['humidity'])
+                Prtlne=Prtlne+' (Hum:'+str(int(self.ids[ZBid]['state']['humidity']/100))+'%) '
             if 'pressure' in self.ids[ZBid]['state']:
-                Prtlne=Prtlne+' (Pres:'+str(self.ids[ZBid]['state']['pressure'])  
+                Prtlne=Prtlne+' (Pres:'+str(self.ids[ZBid]['state']['pressure'])+') '
+            if 'open' in self.ids[ZBid]['state']:
+                if self.ids[ZBid]['state']['open']=='False':
+                    Prtlne=Prtlne+' Door:Closed'
+                else:
+                    Prtlne=Prtlne+' Door:Open'
         return Prtlne  
 
     def Update(self,ZBsid):
@@ -127,9 +132,10 @@ class ZBsensors:
         prvEid=' '
         for sid in self.ids:
             if 'battery' in self.ids[sid]['config'] and prvEid != self.ids[sid]['etag'] :
-                if self.ids[sid]['config']['battery'] < 90 :
-                    prvEid=self.ids[sid]['etag']
-                    Alert("Battery",self.ids[sid]['name']+' Sensor  battery @ '+str(self.ids[sid]['config']['battery'])+'%  ['+prvEid+']' )
+                if self.ids[sid]['config']['battery'] != None:
+                    if int(self.ids[sid]['config']['battery']) < 40 :
+                        prvEid=self.ids[sid]['etag']
+                        Alert("Battery",self.ids[sid]['name']+' Sensor  battery @ '+str(self.ids[sid]['config']['battery'])+'%  ['+prvEid+']' )
         
 class GPIOpins:
     # store the GPIO.ini here and allocate GPIO methods here 
@@ -430,10 +436,10 @@ def LOGmsgs(trc,typ,msg):
 # ------------------------------------------------------------------------------
 
 def IOTcntl(Sid):
-    print('----Event--------------------------------------------------------')
-    print(Sid)
+    #print('----Event--------------------------------------------------------')
+    # print(Sid)
     print(ZBsensorC.PrintSENSOR(Sid['id']))
-    print('-------------')
+    # print('-------------')
 
     SidID=Sid['id']
     # ----------------------- Sensors Config Change
@@ -443,7 +449,7 @@ def IOTcntl(Sid):
                 Alert('Battery','Low Battery in '+ZBsensorC,GetNAME[SidID]+' Sensor')
             if Sid['id']['config']['battery'] < 5:
                 Alert('Battery','Replace Battery in '+ZBsensorC,GetNAME[SidID]+' Sensor')
-        ZBsensorC.Update(Sid)
+        #ZBsensorC.Update(Sid)
         return
 
     #   Button - Toggle Bedroom Fan
@@ -453,7 +459,6 @@ def IOTcntl(Sid):
             GPIOpinsC.TOGGLEbyID('bedroom')
         elif Sid['state']['buttonevent']==1004:     # Button double pressed
             GPIOpinsC.TOGGLEbyID('bathroom')
-        ZBsensorC.Update(Sid)
         return
     
     if  ZBsensorC.GetTYPE(SidID)=='ZHAHumidity':
@@ -466,26 +471,27 @@ def IOTcntl(Sid):
             GPIOpinsC.ON('bedroom')
         if Sid['state']['humidity'] <= 5000 and ZBsensorC.GetNAME(SidID)=='bedroom': 
             GPIOpinsC.OFF('bedroom')
-        ZBsensorC.Update(Sid)
         return
 
-    if  ZBsensorC.GetTYPE(SidID)=='ZHATemperature:':
-        print('Temp change ---------------')
-    
-    
     if  ZBsensorC.GetTYPE(SidID)=='ZHAOpenClose':
+        print(Sid)
         if 'open' in Sid['id']['state']:
             if 'open' in Sid['id']['open']=='True':
                 Alert('Door',ZBsensorC.GetNAME(SidID)+' Open')
+        return
 
+    if  ZBsensorC.GetTYPE(SidID)=='ZHATemperature':
+        return
+
+    if  ZBsensorC.GetTYPE(SidID)=='ZHAPressure':
+        return
+
+    print('-----------------------------------------------------')
     print(ZBsensorC.GetTYPE(SidID)+': Unsupport / Ignored')
-    ZBsensorC.Update(Sid)
-
-    # Sensor Changes
-    # if  ZBsensorC.GetTYPE(Sid['id'])=='ZHASwitch':
-
-
-
+    print(Sid)
+    print('   +    +   +   +   +   +   +   +   +   +   +   +   +')
+    print(ZBsensorC.GetSENSOR(SidID))
+    print('-----------------------------------------------------')
 
    # ---------------------------------------------------------------------------
 
