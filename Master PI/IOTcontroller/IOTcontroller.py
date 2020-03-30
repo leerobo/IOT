@@ -70,7 +70,7 @@ PrvDEV=[]
 #POLLlst={"DEF":0}
 #GaugeW1={"DEF":20}   # W1 Sensors
 #GaugePIN={"DEF":20}  # Activate Pins
-#Vers='1.1.0'
+Vers='0.2.0'
 #MID='XX'
 
 
@@ -81,7 +81,9 @@ PrvDEV=[]
 class ZBsensors:
     # Store Sensors available to ZigBee and routines to extract/update info
     def __init__(self, ZBids):
-        print(ZBids)
+        for sid in ZBids:
+            print(sid)
+            print(ZBids[sid])
         self.ids = ZBids   #  Json DICT
 
     #def ZBGetID(self,ZBid):
@@ -98,27 +100,20 @@ class ZBsensors:
 #  'type': 'ZHATemperature',
 #  'uniqueid': '00:15:8d:00:04:5c:6f:7d-01-0402'}, 
     def GetTYPE(self,ZBid):
-        return self.ids[ZBid]['type']
+        print('GetNAME'+ZBid)
+        if 'type' not in self.ids[ZBid]:
+            return 'N/A'
+        else:
+            print('GetNAME'+self.ids[ZBid]['type'])
+            return self.ids[ZBid]['type']
+    def GetNAME(self,ZBid):
+        if 'name' not in self.ids[ZBid]:
+            return 'N/A'
+        else:
+            return self.ids[ZBid]['name']
+
     def GetSENSOR(self,ZBid):
         return self.ids[ZBid]
-
-    def PrintSENSOR(self,ZBid):
-        Prtlne=str(ZBid)+':'+self.ids[ZBid]['name']+'-'+self.ids[ZBid]['type']
-        if 'battery' in self.ids[ZBid]['config']:
-            Prtlne=Prtlne+' (Bat:'+str(self.ids[ZBid]['config']['battery'])+'%) ' 
-        if 'state' in self.ids[ZBid]:
-            if 'temperature' in self.ids[ZBid]['state']:
-                Prtlne=Prtlne+' (Temp:'+str(float(self.ids[ZBid]['state']['temperature']/100))+') '
-            if 'humidity' in self.ids[ZBid]['state']:
-                Prtlne=Prtlne+' (Hum:'+str(float(self.ids[ZBid]['state']['humidity']/100))+'%) '
-            if 'pressure' in self.ids[ZBid]['state']:
-                Prtlne=Prtlne+' (Pres:'+str(self.ids[ZBid]['state']['pressure'])+') '
-            if 'open' in self.ids[ZBid]['state']:
-                if self.ids[ZBid]['state']['open']==True:
-                    Prtlne=Prtlne+' Door:Open'
-                else:
-                    Prtlne=Prtlne+' Door:Closed'
-        return Prtlne  
 
     def Update(self,ZBsid):
         if 'config' in ZBsid:
@@ -435,20 +430,53 @@ def LOGmsgs(trc,typ,msg):
 #   Core processing Based on Sensors 
 # ------------------------------------------------------------------------------
 
+def IOTprintMSG(Sid):
+    print('IOTprint')
+    SidID=Sid['id']
+    Prtlne = str(SidID)
+    print(Prtlne)
+    Prtlne=Prtlne+'-'+ZBsensorC.GetTYPE[SidID]
+    print(Prtlne)    
+    Prtlne=Prtlne+':'+ZBsensorC.GetNAME[SidID]
+    print(Prtlne)
+
+    if 'state' in Sid:
+        PrtLne=Prtlne+'*STATE*'
+        if 'temperature' in Sid['state']:
+            Prtlne=Prtlne+' (Temp:'+str(float(Sid['state']['temperature']/100))+') '
+        if 'humidity' in Sid['state']:
+            Prtlne=Prtlne+' (Hum:'+str(float(Sid['state']['humidity']/100))+'%) '
+        if 'pressure' in Sid['state']:
+            Prtlne=Prtlne+' (Pres:'+str(Sid['state']['pressure'])+') '
+        if 'open' in Sid['state']:
+            if Sid['state']['open']==True:
+                Prtlne=Prtlne+' Door:Open'
+            else:
+                Prtlne=Prtlne+' Door:Closed'
+
+    print(Prtlne)
+    if 'config' in Sid:
+        PrtLne=Prtlne+'*CONFIG*'
+        if 'battery' in Sid['config']:
+            Prtlne = Prtlne+' (Bat:'+str(Sid['config']['battery'])+'%)'
+
+    print(Prtlne)
+    return Prtlne  
+
 def IOTcntl(Sid):
-    #print('----Event--------------------------------------------------------')
-    # print(Sid)
-    print(ZBsensorC.PrintSENSOR(Sid['id']))
-    # print('-------------')
+    print('----Event--------------------------------------------------------')
+    print(Sid)
+    print(IOTprintMSG(Sid))
+    print('-----------------------------------------------------------------')
 
     SidID=Sid['id']
     # ----------------------- Sensors Config Change
     if 'config' in Sid:
         if 'battery' in Sid['id']['config']:
             if Sid['id']['config']['battery'] < 20:
-                Alert('Battery','Low Battery in '+ZBsensorC,GetNAME[SidID]+' Sensor')
+                Alert('Battery','Low Battery in '+ZBsensorC.GetNAME[SidID]+' Sensor')
             if Sid['id']['config']['battery'] < 5:
-                Alert('Battery','Replace Battery in '+ZBsensorC,GetNAME[SidID]+' Sensor')
+                Alert('Battery','Replace Battery in '+ZBsensorC.GetNAME[SidID]+' Sensor')
         #ZBsensorC.Update(Sid)
         return
 
@@ -496,6 +524,7 @@ def IOTcntl(Sid):
    # ---------------------------------------------------------------------------
 
 def main():
+    print('Version : '+Vers)
     if ValidatePARMS():   #  Load in control Parms
         return
     if ZBsetup():         #  Setup deConz ZigBee
