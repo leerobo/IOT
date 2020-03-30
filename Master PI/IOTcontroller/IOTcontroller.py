@@ -52,18 +52,8 @@ import Adafruit_DHT
 import logging
 import socketserver
 
-#Wire One Directory
-Ddir='/sys/bus/w1/devices/'
 cntlINI = configparser.ConfigParser()
-
-# 4 Port Relay Pins 
-Extractor1 = 0
-Extractor2 = 0
-Lights = 0
-Alarm = 0
-
-#Bedroom1, Bedroom2, Bathroom
-Sensors=[0,0,0]
+cntlGPIO = configparser.ConfigParser()
 
 TEMPtrig=21
 HUMtrig=80
@@ -83,50 +73,110 @@ PrvDEV=[]
 #Vers='1.1.0'
 #MID='XX'
 
+
 # -----------------------------------------------------------------
-#    Wire-1 : Wire 1 functions and routines 
+#   Class objects 
 # -----------------------------------------------------------------
 
-def LISTwire1(SIDs):
-    devicelist = glob.glob(Ddir+'28*')    
-    if devicelist=='':
-        return SIDs
-    else:
-        for device in devicelist:
-            TT=device.split("/")
-            SID = TT[len(TT)-1]
-            SIDs.append('W_S'+SID[3:])
-    return SIDs
+class ZBsensors:
+    # Store Sensors available to ZigBee and routines to extract/update info
+    def __init__(self, ZBids):
+        print(ZBids)
+        self.ids = ZBids   #  Json DICT
 
-# Get Sensor Reading
-def GETwire1(SID):
-    devicefile=Ddir+SID+'/w1_slave'
-    try:
-        fileobj = open(devicefile,'r')
-        lines = fileobj.readlines()
-        fileobj.close()
-    except:
-        return devicefile+" Not Found"
+    #def ZBGetID(self,ZBid):
+    #    return self.ids[ZBid]
 
-    # get the status from the end of line 1 
-    status = lines[0][-4:-1]
+#  '2': {'config': {'battery': 100, 'offset': 0, 'on': True, 'reachable': True}, 
+#  'ep': 1, 
+#  'etag': '1a8a05aef7eef79babaf83bcddceb3c0', 
+#  'manufacturername': 'LUMI',
+#  'modelid': 'lumi.weather',
+#  'name': 'Basement', 
+#  'state': {'lastupdated': '2020-03-28T10:06:25', 'temperature': 1623}, 
+#  'swversion': '20191205',
+#  'type': 'ZHATemperature',
+#  'uniqueid': '00:15:8d:00:04:5c:6f:7d-01-0402'}, 
+    def GetTYPE(self,ZBid):
+        return self.ids[ZBid]['type']
+    def GetSENSOR(self,ZBid):
+        return self.ids[ZBid]
 
-    # is the status is ok, get the temperature from line 2
-    if status=="YES":
-        equals_pos = lines[1].find('t=')
-        temp_string = lines[1][equals_pos+2:]
-        tempvalue=float(temp_string)/1000
-        return tempvalue
-    else:
-        return -999
+    def PrintSENSOR(self,ZBid):
+        Prtlne=str(ZBid)+':'+self.ids[ZBid]['name']+'-'+self.ids[ZBid]['type']
+        if 'battery' in self.ids[ZBid]['config']:
+            Prtlne=Prtlne+' (Bat:'+str(self.ids[ZBid]['config']['battery'])+'%) ' 
+        if 'state' in self.ids[ZBid]:
+            if 'temperature' in self.ids[ZBid]['state']:
+                Prtlne=Prtlne+' (Temp:'+str(self.ids[ZBid]['state']['temperature']) 
+            if 'humidity' in self.ids[ZBid]['state']:
+                Prtlne=Prtlne+' (Hum:'+str(self.ids[ZBid]['state']['humidity'])
+            if 'pressure' in self.ids[ZBid]['state']:
+                Prtlne=Prtlne+' (Pres:'+str(self.ids[ZBid]['state']['pressure'])  
+        return Prtlne  
+
+    def Update(self,ZBsid):
+        if 'config' in ZBsid:
+            print(self.ids[ZBsid['id']]['config'])
+            print(ZBsid['id']['config'])
+            self.ids[ZBsid['id']]['config'] =ZBsid['id']['config']
+        if 'state' in ZBsid:
+            self.ids[ZBsid['id']]['state'] =ZBsid['id']['state']
+               
+    def CheckBATTERY(self):
+        prvEid=' '
+        for sid in self.ids:
+            if 'battery' in self.ids[sid]['config'] and prvEid != self.ids[sid]['etag'] :
+                if self.ids[sid]['config']['battery'] < 90 :
+                    prvEid=self.ids[sid]['etag']
+                    Alert("Battery",self.ids[sid]['name']+' Sensor  battery @ '+str(self.ids[sid]['config']['battery'])+'%  ['+prvEid+']' )
+        
+class GPIOpins:
+    # store the GPIO.ini here and allocate GPIO methods here 
+    def __init__(self, GPIOs):
+        self.pins = {}
+        for section in GPIOs.sections():
+            self.pins[section] = {}
+            for key, val in GPIOs.items(section):
+                self.pins[section][key] = val.lower()
+        for pin in self.pins:
+            if self.pins[pin]['type']=='relay':
+                LED(pin).off()
+                print('pin '+str(pin)+' set to relay')
+
+    def ON(self, id):
+        for pin in self.pins:
+            if self.pins[pin]['id']==id.lower():
+                LED(pin).on(pin)
+
+    def OFF(self, id):
+        for pin in self.pins:
+            if self.pins[pin]['id']==id.lower():
+                LED(pin).off(pin)
+
+    def TOGGLEbyID(self, id):
+        for pin in self.pins:
+            if self.pins[pin]['id']==id.lower():
+                return self.TOGGLEbyPIN(pin)
+
+    def TOGGLEbyPIN(self,pin):
+        if self.pins[pin]['type'] == 'relay':
+            LED(pin).toggle()
+            print('Pin '+str(pin)+' Toggled')
+            return LED(pin).value
+        print('Not supported yet - '+self.pins[pin]['type'] )
+        return -1
 
 # ------------------------------------------------------------------------
 #   Intial Parm Load and validation
 # ------------------------------------------------------------------------
 
 def ValidatePARMS():
-    cntlINI.read('CONTROL.ini')
+    global GPIOpinsC
+    cntlINI.read('CONTROL.ini')  # Controllers
+    cntlGPIO.read('GPIO.ini')    # GPIO settings
     
+    # If netgear set allow access to Netgear Router
     if "netgear" in cntlINI["SETTINGS"]:
         SendMSG("NetGear Active")
         netgear = Netgear(password=cntlINI["SETTINGS"]["netgear"])   
@@ -135,40 +185,12 @@ def ValidatePARMS():
             for sfld in cntlINI["OWNER"]:
                 print(cntlINI["OWNER"][sfld])
 
-    if "Fan1" in cntlINI["SETTINGS"]:
-        Extractor1=LED(cntlINI["SETTINGS"]["Fan1"]) 
-        SendMSG("Extractor 1 on Pin "+cntlINI["SETTINGS"]["fan1"])
-    else:
-        SendMSG("WARNING : No Fan1 Sensors Set")
-
-    if "Fan2" in cntlINI["SETTINGS"]:
-        Extractor2=LED(cntlINI["SETTINGS"]["Fan2"])
-        SendMSG("Extractor 2 on Pin "+cntlINI["SETTINGS"]["fan2"])
-    else:
-        SendMSG("WARNING : No Fan2 Sensors Set")
-
-    if "Lights" in cntlINI["SETTINGS"]:
-        ExtLights=LED(cntlINI["SETTINGS"]["Lights"])
-        SendMSG("External Lights on Pin "+cntlINI["SETTINGS"]["Lights"])
-
-    if "Alarm" in cntlINI["SETTINGS"]:
-        Alarm=LED(cntlINI["SETTINGS"]["Alarm"])
-        SendMSG("Alarm on Pin "+cntlINI["SETTINGS"]["Alarm"])
-
-    TEMPtrig=21
-    HUMtrig=80
-    if "TEMPtrig" in cntlINI["SETTINGS"]:
-        TEMPtrig=cntlINI["SETTINGS"]["TEMPtrig"]
-    SendMSG("Temp Trigger "+str(TEMPtrig))
-    if "HUMtrig" in cntlINI["SETTINGS"]:
-        HUMtrig=cntlINI["SETTINGS"]["HUMtrig"]
-    SendMSG("Hum Trigger "+str(HUMtrig)) 
-
-    # ZigBee
+    # ZigBee controllers
     if cntlINI["ZIGBEE"]["key"] == '':
         SendMSG("ZigBee Key Missing ")
         return True
     SendMSG("ZigBee "+str(cntlINI["ZIGBEE"]["ip"])+" : "+str(cntlINI["ZIGBEE"]["key"] ))
+    GPIOpinsC=GPIOpins(cntlGPIO)
 
     return False
 
@@ -177,6 +199,11 @@ def ValidatePARMS():
 def SendMSG(msg):
     print(msg)
     #journal.send(msg)  
+
+def Alert(lvl,msg):
+    print('Alert('+lvl+') '+msg)
+    r = requests.get('https://wirepusher.com/send?id=dzk6mpnEN&title=Home&message='+msg+'&type='+lvl+'&message_id=1')
+    r.status_code
 
 # ---------------------------------------------------------------------------
 #   API Server : Open API server to Port 18100
@@ -222,7 +249,7 @@ class gpioHTTPServer_RequestHandler(BaseHTTPRequestHandler):
 # ----------------------------------------------------------------------
 
 def ZBsetup():
-    global ZBconfig, ZBsensors
+    global ZBconfig, ZBsensors, ZBsensorC
     params = {"words": 10, "paragraphs": 1, "format": "json"}
     response = requests.get(f"http://"+cntlINI["ZIGBEE"]["ip"]+"/api/"+cntlINI["ZIGBEE"]["key"]+"/sensors/")
     if response.status_code != 200:
@@ -230,7 +257,9 @@ def ZBsetup():
         return True
     ZBSensors=response.json()
     print("ZigBee Sensors Set")
-  
+    ZBsensorC = ZBsensors(response.json())  #  Store Sensors
+    ZBsensorC.CheckBATTERY()                #  Check Batterys
+
     params = {"words": 10, "paragraphs": 1, "format": "json"}
     response = requests.get(f"http://"+cntlINI["ZIGBEE"]["ip"]+"/api/"+cntlINI["ZIGBEE"]["key"]+"/config")
     if response.status_code != 200:
@@ -238,13 +267,21 @@ def ZBsetup():
         return True
     ZBconfig=response.json()
     print("ZigBee Config Set")
- 
+
+def ZBchange(msg):
+    jmsg=json.loads(msg)
+    if 'id' not in jmsg:
+        print('----Unknown Sensor Change Ignored------')
+        print(msg)
+        return
+    IOTcntl(jmsg)  #  Core Processing 
+
 # ----------------------------------------------------------------------
 #   ZigBee DeCONz WebSocket Setup
 # ----------------------------------------------------------------------
 
 def WBws_message(ws, message):
-    print(message)
+    ZBchange(message)
 
 def WBws_error(ws, error):
     print(error)
@@ -296,7 +333,6 @@ def DecodeURL(URLtxt):
 #    Incoming API handler 
 # -----------------------------------------------------------------------
 
-
 def APIincoming(self):
     LOGmsgs('A001','M',self.address_string()+':'+self.path+':'+self.command)
     URLlvl,URLparm = DecodeURL(self.path)
@@ -310,12 +346,11 @@ def APIincoming(self):
 
 # WirePush notifications
 
-def OwnerHome(nam):
-    r = requests.get('https://wirepusher.com/send?id=T27mmpnGY&title=Home&message='+nam+' Home&type=NewDevice&message_id=1')
+def WirePush(Msg,Typ):
+    r = requests.get('https://wirepusher.com/send?id=dzk6mpnEN&title=Home&message='+Msg+'&type='+Typ+'&message_id=1')
     r.status_code
-    #SendMSG(r)
 def ClearMSG():
-    r = requests.get('https://wirepusher.com/send?id=T27mmpnGY&type=wirepusher_clear_notification&message_id=1')
+    r = requests.get('https://wirepusher.com/send?id=dzk6mpnEn&type=wirepusher_clear_notification&message_id=1')
     r.status_code
     #SendMSG(r)
 
@@ -390,6 +425,68 @@ def LOGvalues(SID,HUM,TMP,STA):
 def LOGmsgs(trc,typ,msg):
     SendMSG(trc+':'+typ+'-'+msg)
 
+# ------------------------------------------------------------------------------
+#   Core processing Based on Sensors 
+# ------------------------------------------------------------------------------
+
+def IOTcntl(Sid):
+    print('----Event--------------------------------------------------------')
+    print(Sid)
+    print(ZBsensorC.PrintSENSOR(Sid['id']))
+    print('-------------')
+
+    SidID=Sid['id']
+    # ----------------------- Sensors Config Change
+    if 'config' in Sid:
+        if 'battery' in Sid['id']['config']:
+            if Sid['id']['config']['battery'] < 20:
+                Alert('Battery','Low Battery in '+ZBsensorC,GetNAME[SidID]+' Sensor')
+            if Sid['id']['config']['battery'] < 5:
+                Alert('Battery','Replace Battery in '+ZBsensorC,GetNAME[SidID]+' Sensor')
+        ZBsensorC.Update(Sid)
+        return
+
+    #   Button - Toggle Bedroom Fan
+    if  ZBsensorC.GetTYPE(SidID)=='ZHASwitch':
+        print('Button Pressed '+str(Sid['state']['buttonevent']))
+        if Sid['state']['buttonevent']==1002 or Sid['state']['buttonevent'] == 1003: # Button pressed
+            GPIOpinsC.TOGGLEbyID('bedroom')
+        elif Sid['state']['buttonevent']==1004:     # Button double pressed
+            GPIOpinsC.TOGGLEbyID('bathroom')
+        ZBsensorC.Update(Sid)
+        return
+    
+    if  ZBsensorC.GetTYPE(SidID)=='ZHAHumidity':
+        print('Humidity '+str(int(Sid['state']['humidity']/100))+' on '+ZBsensorC.GetNAME(SidID))
+        if Sid['state']['humidity'] >= 7500 and ZBsensorC.GetNAME(SidID)=='bathroom':
+            GPIOpinsC.ON('bathroom')
+        if Sid['state']['humidity'] <= 7000 and ZBsensorC.GetNAME(SidID)=='bathroom':
+            GPIOpinsC.OFF('bathroom')
+        if Sid['state']['humidity'] >= 6500 and ZBsensorC.GetNAME(SidID)=='bedroom': 
+            GPIOpinsC.ON('bedroom')
+        if Sid['state']['humidity'] <= 5000 and ZBsensorC.GetNAME(SidID)=='bedroom': 
+            GPIOpinsC.OFF('bedroom')
+        ZBsensorC.Update(Sid)
+        return
+
+    if  ZBsensorC.GetTYPE(SidID)=='ZHATemperature:':
+        print('Temp change ---------------')
+    
+    
+    if  ZBsensorC.GetTYPE(SidID)=='ZHAOpenClose':
+        if 'open' in Sid['id']['state']:
+            if 'open' in Sid['id']['open']=='True':
+                Alert('Door',ZBsensorC.GetNAME(SidID)+' Open')
+
+    print(ZBsensorC.GetTYPE(SidID)+': Unsupport / Ignored')
+    ZBsensorC.Update(Sid)
+
+    # Sensor Changes
+    # if  ZBsensorC.GetTYPE(Sid['id'])=='ZHASwitch':
+
+
+
+
    # ---------------------------------------------------------------------------
 
 def main():
@@ -408,7 +505,10 @@ def main():
     # ------------------------------------------------------------------------------
     #   Start WebSocket for event actions of sensors
     # ------------------------------------------------------------------------------
-    websocket.enableTrace(True)
+    #websocket.enableTrace(True)
+    SendMSG('ZigBee Socket on Port '+str(ZBconfig["websocketport"]))
+    SendMSG('--------------------------------------------------------------------')
+
     WBzbIP="ws://"+cntlINI["ZIGBEE"]["ip"]+":"+str(ZBconfig["websocketport"])
     WBws = websocket.WebSocketApp(WBzbIP,
                               on_message = WBws_message,
@@ -416,20 +516,6 @@ def main():
                               on_close = WBws_close)
     WBws_onopen = WBws_open
     WBws.run_forever()
-
-    # while 1:
-    #     #CheckSENSORS()
-    #     #if Router:
-    #     #    CheckROUTER()
-
-    #     GapCnt=0
-    #     while GapCnt <= PollGAP:
-    #         httpd.handle_request() # Poll API Getway
-    #         if ButtonOV:
-    #             Button.wait_for_press(1) 
-    #         else:
-    #             time.sleep(1)
-    #         GapCnt+=1
 
 if __name__=="__main__":
     main()
