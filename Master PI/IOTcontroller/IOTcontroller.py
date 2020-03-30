@@ -108,16 +108,16 @@ class ZBsensors:
             Prtlne=Prtlne+' (Bat:'+str(self.ids[ZBid]['config']['battery'])+'%) ' 
         if 'state' in self.ids[ZBid]:
             if 'temperature' in self.ids[ZBid]['state']:
-                Prtlne=Prtlne+' (Temp:'+str(int(self.ids[ZBid]['state']['temperature']/100))+') '
+                Prtlne=Prtlne+' (Temp:'+str(float(self.ids[ZBid]['state']['temperature']/100))+') '
             if 'humidity' in self.ids[ZBid]['state']:
-                Prtlne=Prtlne+' (Hum:'+str(int(self.ids[ZBid]['state']['humidity']/100))+'%) '
+                Prtlne=Prtlne+' (Hum:'+str(float(self.ids[ZBid]['state']['humidity']/100))+'%) '
             if 'pressure' in self.ids[ZBid]['state']:
                 Prtlne=Prtlne+' (Pres:'+str(self.ids[ZBid]['state']['pressure'])+') '
             if 'open' in self.ids[ZBid]['state']:
-                if self.ids[ZBid]['state']['open']=='False':
-                    Prtlne=Prtlne+' Door:Closed'
-                else:
+                if self.ids[ZBid]['state']['open']==True:
                     Prtlne=Prtlne+' Door:Open'
+                else:
+                    Prtlne=Prtlne+' Door:Closed'
         return Prtlne  
 
     def Update(self,ZBsid):
@@ -476,7 +476,7 @@ def IOTcntl(Sid):
     if  ZBsensorC.GetTYPE(SidID)=='ZHAOpenClose':
         print(Sid)
         if 'open' in Sid['id']['state']:
-            if 'open' in Sid['id']['open']=='True':
+            if 'open' in Sid['id']['open']==True:
                 Alert('Door',ZBsensorC.GetNAME(SidID)+' Open')
         return
 
