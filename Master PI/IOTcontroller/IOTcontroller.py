@@ -65,7 +65,6 @@ PollGAP = 10   # Poll Gap between checking sensors
 ActDEV=[]
 PrvDEV=[]
 
-
 #KillSwitch = True
 #POLLlst={"DEF":0}
 #GaugeW1={"DEF":20}   # W1 Sensors
@@ -81,9 +80,56 @@ Vers='0.2.0'
 class ZBsensors:
     # Store Sensors available to ZigBee and routines to extract/update info
     def __init__(self, ZBids):
+        self.SIDX={}
+        self.SID={}
         for sid in ZBids:
             print(sid)
             print(ZBids[sid])
+
+        for sid in ZBids:
+            self.SIDX[sid]=ZBids[sid]['etag']
+            etag=ZBids[sid]['etag']
+
+            if etag not in self.SID:
+                print(ZBids[sid]['name']+' Sensor Found')
+                self.SID[etag]={}
+                self.SID[etag]['name']=ZBids[sid]['name']
+                self.SID[etag]['modelid']=ZBids[sid]['modelid']
+
+                if ZBids[sid]['modelid'] == 'lumi.remote.b1acn01':
+                    self.SID[etag]['type']='Button'
+                elif ZBids[sid]['modelid'] == 'lumi.weather':
+                    self.SID[etag]['type']='MultiSensor'
+                elif ZBids[sid]['modelid'] == 'lumi.sensor_magnet.aq2':
+                    self.SID[etag]['type']='MagSwitch'
+                elif ZBids[sid]['modelid'] == 'PHDL00':
+                    self.SID[etag]['type']='Controller'
+                else:
+                    self.SID[etag]['type']='N/A'                    
+
+            if 'config' in ZBids[sid]:    
+                if 'battery' in ZBids[sid]['config']:
+                    self.SID[etag]['battery']=ZBids[sid]['config']['battery']
+                if 'temperature' in ZBids[sid]['config']:
+                    self.SID[etag]['temp']=ZBids[sid]['config']['temperature']
+
+            if 'state' in ZBids[sid]:
+                if 'temperature' in ZBids[sid]['state']:
+                    self.SID[etag]['temp']=ZBids[sid]['state']['temperature']                    
+                if 'humidity' in ZBids[sid]['state']:
+                    self.SID[etag]['hum']=ZBids[sid]['state']['humidity']                    
+                if 'pressure' in ZBids[sid]['state']:
+                    self.SID[etag]['Pres']=ZBids[sid]['state']['pressure']                    
+                if 'open' in ZBids[sid]['state']:
+                    self.SID[etag]['open']=ZBids[sid]['state']['open']
+                if 'lastupdated' in ZBids[sid]['state']:
+                    self.SID[etag]['lastupdated']=ZBids[sid]['state']['lastupdated']
+
+        for sid in self.SID:
+            print(self.SID[sid])
+        for sid in self.SIDX:
+            print(sid+':'+self.SIDX[sid])
+
         self.ids = ZBids   #  Json DICT
 
     #def ZBGetID(self,ZBid):
@@ -100,20 +146,14 @@ class ZBsensors:
 #  'type': 'ZHATemperature',
 #  'uniqueid': '00:15:8d:00:04:5c:6f:7d-01-0402'}, 
     def GetTYPE(self,ZBid):
-        print('GetNAME'+ZBid)
-        if 'type' not in self.ids[ZBid]:
-            return 'N/A'
-        else:
-            print('GetNAME'+self.ids[ZBid]['type'])
-            return self.ids[ZBid]['type']
+        Etag=self.SIDX[ZBid]
+        return self.SID[Etag]['type']
     def GetNAME(self,ZBid):
-        if 'name' not in self.ids[ZBid]:
-            return 'N/A'
-        else:
-            return self.ids[ZBid]['name']
-
+        Etag=self.SIDX[ZBid]
+        return self.SID[Etag]['name']
     def GetSENSOR(self,ZBid):
-        return self.ids[ZBid]
+        Etag=self.SIDX[ZBid]
+        return self.SID[Etag] 
 
     def Update(self,ZBsid):
         if 'config' in ZBsid:
@@ -431,14 +471,10 @@ def LOGmsgs(trc,typ,msg):
 # ------------------------------------------------------------------------------
 
 def IOTprintMSG(Sid):
-    print('IOTprint')
     SidID=Sid['id']
     Prtlne = str(SidID)
-    print(Prtlne)
-    Prtlne=Prtlne+'-'+ZBsensorC.GetTYPE[SidID]
-    print(Prtlne)    
-    Prtlne=Prtlne+':'+ZBsensorC.GetNAME[SidID]
-    print(Prtlne)
+    Prtlne=Prtlne+'-'+ZBsensorC.GetTYPE(SidID)
+    Prtlne=Prtlne+':'+ZBsensorC.GetNAME(SidID)
 
     if 'state' in Sid:
         PrtLne=Prtlne+'*STATE*'
@@ -454,13 +490,11 @@ def IOTprintMSG(Sid):
             else:
                 Prtlne=Prtlne+' Door:Closed'
 
-    print(Prtlne)
     if 'config' in Sid:
         PrtLne=Prtlne+'*CONFIG*'
         if 'battery' in Sid['config']:
             Prtlne = Prtlne+' (Bat:'+str(Sid['config']['battery'])+'%)'
 
-    print(Prtlne)
     return Prtlne  
 
 def IOTcntl(Sid):
@@ -481,7 +515,7 @@ def IOTcntl(Sid):
         return
 
     #   Button - Toggle Bedroom Fan
-    if  ZBsensorC.GetTYPE(SidID)=='ZHASwitch':
+    if  ZBsensorC.GetTYPE(SidID)=='Button':
         print('Button Pressed '+str(Sid['state']['buttonevent']))
         if Sid['state']['buttonevent']==1002 or Sid['state']['buttonevent'] == 1003: # Button pressed
             GPIOpinsC.TOGGLEbyID('bedroom')
@@ -489,19 +523,19 @@ def IOTcntl(Sid):
             GPIOpinsC.TOGGLEbyID('bathroom')
         return
     
-    if  ZBsensorC.GetTYPE(SidID)=='ZHAHumidity':
-        print('Humidity '+str(int(Sid['state']['humidity']/100))+' on '+ZBsensorC.GetNAME(SidID))
-        if Sid['state']['humidity'] >= 7500 and ZBsensorC.GetNAME(SidID)=='bathroom':
-            GPIOpinsC.ON('bathroom')
-        if Sid['state']['humidity'] <= 7000 and ZBsensorC.GetNAME(SidID)=='bathroom':
-            GPIOpinsC.OFF('bathroom')
-        if Sid['state']['humidity'] >= 6500 and ZBsensorC.GetNAME(SidID)=='bedroom': 
-            GPIOpinsC.ON('bedroom')
-        if Sid['state']['humidity'] <= 5000 and ZBsensorC.GetNAME(SidID)=='bedroom': 
-            GPIOpinsC.OFF('bedroom')
-        return
+    # if  ZBsensorC.GetTYPE(SidID)=='MultiSensor':
+    #     print('Humidity '+str(int(Sid['state']['humidity']/100))+' on '+ZBsensorC.GetNAME(SidID))
+    #     if Sid['state']['humidity'] >= 7500 and ZBsensorC.GetNAME(SidID)=='bathroom':
+    #         GPIOpinsC.ON('bathroom')
+    #     if Sid['state']['humidity'] <= 7000 and ZBsensorC.GetNAME(SidID)=='bathroom':
+    #         GPIOpinsC.OFF('bathroom')
+    #     if Sid['state']['humidity'] >= 6500 and ZBsensorC.GetNAME(SidID)=='bedroom': 
+    #         GPIOpinsC.ON('bedroom')
+    #     if Sid['state']['humidity'] <= 5000 and ZBsensorC.GetNAME(SidID)=='bedroom': 
+    #         GPIOpinsC.OFF('bedroom')
+    #     return
 
-    if  ZBsensorC.GetTYPE(SidID)=='ZHAOpenClose':
+    if  ZBsensorC.GetTYPE(SidID)=='MagSwitch':
         print(Sid)
         if 'open' in Sid['id']['state']:
             if 'open' in Sid['id']['open']==True:
