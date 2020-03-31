@@ -170,7 +170,7 @@ class ZBsensors:
                 if self.ids[sid]['config']['battery'] != None:
                     if int(self.ids[sid]['config']['battery']) < 40 :
                         prvEid=self.ids[sid]['etag']
-                        Alert("Battery",self.ids[sid]['name']+' Sensor  battery @ '+str(self.ids[sid]['config']['battery'])+'%  ['+prvEid+']' )
+                        Alert("Battery",1,self.ids[sid]['name']+' Sensor  battery @ '+str(self.ids[sid]['config']['battery'])+'%  ['+prvEid+']' )
         
 class GPIOpins:
     # store the GPIO.ini here and allocate GPIO methods here 
@@ -203,7 +203,7 @@ class GPIOpins:
     def TOGGLEbyPIN(self,pin):
         if self.pins[pin]['type'] == 'relay':
             LED(pin).toggle()
-            print('Pin '+str(pin)+' Toggled')
+            print('Pin '+str(pin)+' Toggled  ('+str(LED(pin).value)+')')
             return LED(pin).value
         print('Not supported yet - '+self.pins[pin]['type'] )
         return -1
@@ -241,9 +241,9 @@ def SendMSG(msg):
     print(msg)
     #journal.send(msg)  
 
-def Alert(lvl,msg):
-    print('Alert('+lvl+') '+msg)
-    r = requests.get('https://wirepusher.com/send?id=dzk6mpnEN&title=Home&message='+msg+'&type='+lvl+'&message_id=1')
+def Alert(lvl,MsgId,msg):
+    print('Alert('+lvl+'/'+str(MsgId)+') '+msg)
+    r = requests.get('https://wirepusher.com/send?id=dzk6mpnEN&title=Home&message='+msg+'&type='+lvl+'&message_id='+str(Msgid))
     r.status_code
 
 # ---------------------------------------------------------------------------
@@ -290,6 +290,7 @@ class gpioHTTPServer_RequestHandler(BaseHTTPRequestHandler):
 # ----------------------------------------------------------------------
 
 def ZBsetup():
+    global LockSys
     global ZBconfig, ZBsensors, ZBsensorC
     params = {"words": 10, "paragraphs": 1, "format": "json"}
     response = requests.get(f"http://"+cntlINI["ZIGBEE"]["ip"]+"/api/"+cntlINI["ZIGBEE"]["key"]+"/sensors/")
@@ -308,6 +309,7 @@ def ZBsetup():
         return True
     ZBconfig=response.json()
     print("ZigBee Config Set")
+    LockSys= datetime.datetime.today()
 
 def ZBchange(msg):
     jmsg=json.loads(msg)
@@ -498,62 +500,64 @@ def IOTprintMSG(Sid):
     return Prtlne  
 
 def IOTcntl(Sid):
+    
     print('----Event--------------------------------------------------------')
     print(Sid)
     print(IOTprintMSG(Sid))
     print('-----------------------------------------------------------------')
-
     SidID=Sid['id']
-    # ----------------------- Sensors Config Change
-    if 'config' in Sid:
-        if 'battery' in Sid['id']['config']:
-            if Sid['id']['config']['battery'] < 20:
-                Alert('Battery','Low Battery in '+ZBsensorC.GetNAME[SidID]+' Sensor')
-            if Sid['id']['config']['battery'] < 5:
-                Alert('Battery','Replace Battery in '+ZBsensorC.GetNAME[SidID]+' Sensor')
-        #ZBsensorC.Update(Sid)
-        return
 
-    #   Button - Toggle Bedroom Fan
+    # ----------------------- Alerts
+    if  ZBsensorC.GetTYPE(SidID)=='MagSwitch':     # Doors
+        print('Magswitch active')
+        if 'open' in Sid['state']:
+            print('Magswitch open flagged')
+            if Sid['state']['open']==True:
+                Alert("Door",5,ZBsensorC.GetNAME(SidID)+' Door Open')
+
+    if 'config' in Sid:                            # Battery Check
+        if 'battery' in Sid['config']:
+            if Sid['config']['battery'] < 10:
+                Alert("Battery",6,ZBsensorC.GetNAME(SidID)+' Bettery is Low')
+            if Sid['config']['battery'] < 3: 
+                Alert("Battery",7,ZBsensorC.GetNAME(SidID)+' Bettery is Dead')
+
+    # ----------------------- Button Overrides
     if  ZBsensorC.GetTYPE(SidID)=='Button':
-        print('Button Pressed '+str(Sid['state']['buttonevent']))
-        if Sid['state']['buttonevent']==1002 or Sid['state']['buttonevent'] == 1003: # Button pressed
+        if Sid['state']['buttonevent'] == 1002 or Sid['state']['buttonevent'] == 1003:     # Button pressed
             GPIOpinsC.TOGGLEbyID('bedroom')
         elif Sid['state']['buttonevent']==1004:     # Button double pressed
             GPIOpinsC.TOGGLEbyID('bathroom')
-        return
-    
-    # if  ZBsensorC.GetTYPE(SidID)=='MultiSensor':
-    #     print('Humidity '+str(int(Sid['state']['humidity']/100))+' on '+ZBsensorC.GetNAME(SidID))
-    #     if Sid['state']['humidity'] >= 7500 and ZBsensorC.GetNAME(SidID)=='bathroom':
-    #         GPIOpinsC.ON('bathroom')
-    #     if Sid['state']['humidity'] <= 7000 and ZBsensorC.GetNAME(SidID)=='bathroom':
-    #         GPIOpinsC.OFF('bathroom')
-    #     if Sid['state']['humidity'] >= 6500 and ZBsensorC.GetNAME(SidID)=='bedroom': 
-    #         GPIOpinsC.ON('bedroom')
-    #     if Sid['state']['humidity'] <= 5000 and ZBsensorC.GetNAME(SidID)=='bedroom': 
-    #         GPIOpinsC.OFF('bedroom')
-    #     return
+        LockSys = datetime.datetime.today() + datetime.timedelta(minutes = 1)
+        print(LockSys.strftime('%H:%M:%S'))
 
-    if  ZBsensorC.GetTYPE(SidID)=='MagSwitch':
-        print(Sid)
-        if 'open' in Sid['id']['state']:
-            if 'open' in Sid['id']['open']==True:
-                Alert('Door',ZBsensorC.GetNAME(SidID)+' Open')
-        return
+    # ----------------------- Auto Controllers
+    if LockSys < time.localtime():
+        if 'state' in Sid and ZBsensorC.GetNAME(SidID)=='bathroom':
+            # Bathroom Controller
+            if 'humidity' in Sid['state']:
+                if Sid['state']['humidity'] >= 6500:
+                    GPIOpinsC.ON('bathroom')
+                elif Sid['state']['humidity'] <= 5500:
+                    GPIOpinsC.OFF('bathroom')
+            elif 'temperature' in Sid['state']:
+                if Sid['state']['temperature'] >= 2600:
+                    GPIOpinsC.ON('bathroom')
+                elif Sid['state']['temperature'] <= 2200:
+                    GPIOpinsC.OFF('bathroom')                    
 
-    if  ZBsensorC.GetTYPE(SidID)=='ZHATemperature':
-        return
-
-    if  ZBsensorC.GetTYPE(SidID)=='ZHAPressure':
-        return
-
-    print('-----------------------------------------------------')
-    print(ZBsensorC.GetTYPE(SidID)+': Unsupport / Ignored')
-    print(Sid)
-    print('   +    +   +   +   +   +   +   +   +   +   +   +   +')
-    print(ZBsensorC.GetSENSOR(SidID))
-    print('-----------------------------------------------------')
+        if 'state' in Sid and ZBsensorC.GetNAME(SidID)=='bedroom':
+            # Bathroom Controller
+            if 'humidity' in Sid['state']:
+                if Sid['state']['humidity'] >= 4000:
+                    GPIOpinsC.ON('bathroom')
+                elif Sid['state']['humidity'] <= 3000:
+                    GPIOpinsC.OFF('bathroom')
+            elif 'temperature' in Sid['state']:
+                if Sid['state']['temperature'] >= 2300:
+                    GPIOpinsC.ON('bathroom')
+                elif Sid['state']['temperature'] <= 2200:
+                    GPIOpinsC.OFF('bathroom')
 
    # ---------------------------------------------------------------------------
 
