@@ -17,33 +17,33 @@
 #
 #    V 0.0.1 - Mar 2020 - Initial coding 
 #    V 0.0.2 - Apr 2020 - Add support for ZigBee deconz REST api
-#    V 0.2.1 -          - Remove REST api and tidy up code 
 #  
 # ----------------------------------------------------------------------------
 
-# from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pynetgear import Netgear
 import requests
 from gpiozero import LED, Button
+
 import websocket
 try:
     import thread
 except ImportError:
     import _thread as thread
-
 import time
+
 from urllib import parse
 from gpiozero import LED
 
-import datetime
 import configparser 
-
+import time
 import http.client
 import json
 
 import sys
 import os
 import time
+import datetime
 import glob
 import socket
 from array import array
@@ -55,11 +55,23 @@ import socketserver
 cntlINI = configparser.ConfigParser()
 cntlGPIO = configparser.ConfigParser()
 
+TEMPtrig=21
+HUMtrig=80
+
+ButtonOV = 0
 Router = False
 PollGAP = 10   # Poll Gap between checking sensors
-LockSys = 0 
 
-Vers='0.2.1'
+ActDEV=[]
+PrvDEV=[]
+
+#KillSwitch = True
+#POLLlst={"DEF":0}
+#GaugeW1={"DEF":20}   # W1 Sensors
+#GaugePIN={"DEF":20}  # Activate Pins
+Vers='0.2.0'
+#MID='XX'
+
 
 # -----------------------------------------------------------------
 #   Class objects 
@@ -130,6 +142,7 @@ class ZBsensors:
     def GetSENSOR(self,ZBid):
         Etag=self.SIDX[ZBid]
         return self.SID[Etag] 
+
     def UpdSENSOR(self,Sid):
         ZBid = Sid['id']
         etag=self.SIDX[ZBid]
@@ -143,6 +156,7 @@ class ZBsensors:
             self.SID[etag]['temp']=Sid['state']['temperature']
         if 'pressure' in Sid:
             self.SID[etag]['pres']=Sid['state']['pressure']
+
     def CheckBATTERY(self):
         prvEid=' '
         for sid in self.ids:
@@ -169,14 +183,12 @@ class GPIOpins:
     def ON(self, id):
         for pin in self.pins:
             if self.pins[pin]['id']==id.lower():
-                print("Relay "+str(pin)+' On' )
-                LED(pin).on()
+                LED(pin).on(pin)
 
     def OFF(self, id):
         for pin in self.pins:
             if self.pins[pin]['id']==id.lower():
-                print("Relay "+str(pin)+' OFF' )
-                LED(pin).off()
+                LED(pin).off(pin)
 
     def TOGGLEbyID(self, id):
         for pin in self.pins:
@@ -219,14 +231,52 @@ def ValidatePARMS():
 
     return False
 
+# ---------------------------------------------------------------------------
+#   API Server : Open API server to Port 
+# ---------------------------------------------------------------------------
+
+class gpioHTTPServer_RequestHandler(BaseHTTPRequestHandler):
+    #def do_OPTIONS(self):         
+    #    self.send_response(200)      
+        #self.send_header('Access-Control-Allow-Origin', '*')                
+        #self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    #    self.send_header('Access-Control-Allow-Methods', 'GET, POST')
+        #self.send_header("Access-Control-Allow-Headers", "X-Requested-With") 
+    #    return
+
+    def do_GET(self):
+        SendMSG('------------------------------ GET')
+        ftrTXT=open('Footer.html','r+')
+        pageTYP,Rsn=APIincoming(self)
+
+        self.send_response(200)
+        if pageTYP=='JSON':
+            self.send_header('application/json')
+            Rply = Rsn
+        else:
+            self.send_header('Content-type','text/html')
+            hdrTXT=open('Header.html','r+')
+            Rply = hdrTXT.read()+Rsn+ftrTXT.read()
+
+        self.end_headers()
+        self.wfile.write(bytes(Rply, "utf8"))
+        return
+
+    def do_POST(self):
+        SendMSG('------------------------------ POST')
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(bytes("OK","utf8"))
+        return
+
 # ----------------------------------------------------------------------
 #  ZigBee CALLS
 # ----------------------------------------------------------------------
 
 def ZBsetup():
-    global ZBconfig, ZBsensors, ZBsensorC, LockSys
-    LockSys = datetime.datetime.today()
-
+    global LockSys
+    global ZBconfig, ZBsensors, ZBsensorC
     params = {"words": 10, "paragraphs": 1, "format": "json"}
     response = requests.get(f"http://"+cntlINI["ZIGBEE"]["ip"]+"/api/"+cntlINI["ZIGBEE"]["key"]+"/sensors/")
     if response.status_code != 200:
@@ -244,6 +294,7 @@ def ZBsetup():
         return True
     ZBconfig=response.json()
     print("ZigBee Config Set")
+    LockSys= datetime.datetime.today()
 
 def ZBchange(msg):
     jmsg=json.loads(msg)
@@ -304,6 +355,21 @@ def DecodeURL(URLtxt):
         
     return Uarr,UParms
 
+# ----------------------------------------------------------------------
+#    Incoming API handler 
+# -----------------------------------------------------------------------
+
+def APIincoming(self):
+    LOGmsgs('A001','M',self.address_string()+':'+self.path+':'+self.command)
+    URLlvl,URLparm = DecodeURL(self.path)
+
+    if len(URLlvl) == 0:   # Return Index if requried here 
+        bdyTXT=open('bdyTXT.html','r+')
+        return 'HTML',bdyTXT.read()
+
+    # Place here different URLlvl 
+    return 'HTML','<body><hdr>Missing Task</hdr></body>'
+
 # ----------------------------------------------------------------
 #  Netgear API
 # ----------------------------------------------------------------
@@ -355,7 +421,7 @@ def SendMSG(msg):
 
 def Alert(lvl,MsgId,msg):
     print('Alert('+lvl+'/'+str(MsgId)+') '+msg)
-    APImsg='https://wirepusher.com/send?id=dzk6mpnEN&title=Home&message='+msg+'&type='+lvl+'&message_id='+str(MsgId)
+    APImsg='https://wirepusher.com/send?id=dzk6mpnEN&title=Home&message='+msg+'&type='+lvl+'&message_id='+str(Msgid)
     print(APImsg)
     r = requests.get(APImsg)
     r.status_code
@@ -393,7 +459,7 @@ def IOTprintMSG(Sid):
     return Prtlne  
 
 def IOTcntl(Sid):
-    global LockSys
+    
     print('----Event--------------------------------------------------------')
     print(Sid)
     print(IOTprintMSG(Sid))
@@ -404,10 +470,9 @@ def IOTcntl(Sid):
 
     # ----------------------- Alerts
     if  ZBsensorC.GetTYPE(SidID)=='MagSwitch':     # Doors
-        if 'state' in Sid:
-            if 'open' in Sid['state']:
-                if Sid['state']['open']==True:
-                    Alert("Door",5,ZBsensorC.GetNAME(SidID)+' Open')
+        if 'open' in Sid['state']:
+            if Sid['state']['open']==True:
+                Alert("Door",5,ZBsensorC.GetNAME(SidID)+' Open')
 
     if 'config' in Sid:                            # Battery Check
         if 'battery' in Sid['config']:
@@ -426,7 +491,7 @@ def IOTcntl(Sid):
         print(LockSys.strftime('%H:%M:%S'))
 
     # ----------------------- Auto Controllers
-    if LockSys < datetime.datetime.today():
+    if LockSys < time.localtime():
         if 'state' in Sid and ZBsensorC.GetNAME(SidID)=='bathroom':
             # Bathroom Controller
             if 'humidity' in Sid['state']:
@@ -453,8 +518,6 @@ def IOTcntl(Sid):
                 elif Sid['state']['temperature'] <= 2200:
                     GPIOpinsC.OFF('bathroom')
 
-    LockSys = datetime.datetime.today()
-
    # ---------------------------------------------------------------------------
 
 def main():
@@ -464,12 +527,20 @@ def main():
     if ZBsetup():         #  Setup deConz ZigBee
         return 
 
+    # Start API Server 
+    server_address = ('', 18101)
+    httpd = HTTPServer(server_address, gpioHTTPServer_RequestHandler)
+    httpd.socket.settimeout(1)
+    httpd.handle_request()
+    SendMSG('IOTcontroller API running on 18101')
+
     # ------------------------------------------------------------------------------
     #   Start WebSocket for event actions of sensors
     # ------------------------------------------------------------------------------
-    websocket.enableTrace(True)
+    #websocket.enableTrace(True)
     SendMSG('ZigBee Socket on Port '+str(ZBconfig["websocketport"]))
     SendMSG('--------------------------------------------------------------------')
+
     WBzbIP="ws://"+cntlINI["ZIGBEE"]["ip"]+":"+str(ZBconfig["websocketport"])
     WBws = websocket.WebSocketApp(WBzbIP,
                               on_message = WBws_message,
