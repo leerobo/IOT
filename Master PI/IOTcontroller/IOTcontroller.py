@@ -355,11 +355,11 @@ def SendMSG(msg):
 
 def Alert(lvl,MsgId,msg):
     print('Alert('+lvl+'/'+str(MsgId)+') '+msg)
-    APImsg='https://wirepusher.com/send?id=dzk6mpnEN&title=Home&message='+msg+'&type='+lvl+'&message_id='+str(MsgId)
-    print(APImsg)
-    r = requests.get(APImsg)
-    r.status_code
-    print(r.status_code)
+    if 'WIREPUSHER' in cntlINI:
+        for WPid in cntlINI['WIREPUSHER']:
+            APImsg='https://wirepusher.com/send?id='+cntlINI['WIREPUSHER'][WPid]+'&title=Home&message='+msg+'&type='+lvl+'&message_id='+str(MsgId)
+            r = requests.get(APImsg)
+            r.status_code
 
 # ------------------------------------------------------------------------------
 #   Core processing Based on Sensors 
@@ -418,12 +418,13 @@ def IOTcntl(Sid):
 
     # ----------------------- Button Overrides
     if  ZBsensorC.GetTYPE(SidID)=='Button':
-        if Sid['state']['buttonevent'] == 1002 or Sid['state']['buttonevent'] == 1003:     # Button pressed
-            GPIOpinsC.TOGGLEbyID('bedroom')
-        elif Sid['state']['buttonevent']==1004:     # Button double pressed
-            GPIOpinsC.TOGGLEbyID('bathroom')
-        LockSys = datetime.datetime.today() + datetime.timedelta(minutes = 1)
-        print(LockSys.strftime('%H:%M:%S'))
+        if 'state' in Sid and 'buttoneevent' in Sid['state']:
+            if Sid['state']['buttonevent'] == 1002 or Sid['state']['buttonevent'] == 1003:     # Button pressed
+                GPIOpinsC.TOGGLEbyID('bedroom')
+            elif Sid['state']['buttonevent']==1004:     # Button double pressed
+                GPIOpinsC.TOGGLEbyID('bathroom')
+            LockSys = datetime.datetime.today() + datetime.timedelta(minutes = 1)
+            print(LockSys.strftime('%H:%M:%S'))
 
     # ----------------------- Auto Controllers
     if LockSys < datetime.datetime.today():
