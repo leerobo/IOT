@@ -34,6 +34,7 @@ except ImportError:
 import time
 from urllib import parse
 from gpiozero import LED
+from ZigBee import ZBsensors
 
 import datetime
 import configparser 
@@ -65,92 +66,92 @@ Vers='0.2.1'
 #   Class objects 
 # -----------------------------------------------------------------
 
-class ZBsensors:
-    # Store Sensors available to ZigBee and routines to extract/update info
-    def __init__(self, ZBids):
-        self.SIDX={}
-        self.SID={}
-        for sid in ZBids:
-            print(sid)
-            print(ZBids[sid])
+# class ZBsensors:
+#     # Store Sensors available to ZigBee and routines to extract/update info
+#     def __init__(self, ZBids):
+#         self.SIDX={}
+#         self.SID={}
+#         for sid in ZBids:
+#             print(sid)
+#             print(ZBids[sid])
 
-        # Break Sensors into a easier format to read/update
-        for sid in ZBids:
-            self.SIDX[sid]=ZBids[sid]['etag']
-            etag=ZBids[sid]['etag']
+#         # Break Sensors into a easier format to read/update
+#         for sid in ZBids:
+#             self.SIDX[sid]=ZBids[sid]['etag']
+#             etag=ZBids[sid]['etag']
 
-            if etag not in self.SID:
-                print(ZBids[sid]['name']+' Sensor Found '+etag)
-                self.SID[etag]={}
-                self.SID[etag]['name']=ZBids[sid]['name']
-                self.SID[etag]['modelid']=ZBids[sid]['modelid']
+#             if etag not in self.SID:
+#                 print(ZBids[sid]['name']+' Sensor Found '+etag)
+#                 self.SID[etag]={}
+#                 self.SID[etag]['name']=ZBids[sid]['name']
+#                 self.SID[etag]['modelid']=ZBids[sid]['modelid']
 
-                if ZBids[sid]['modelid'] == 'lumi.remote.b1acn01':
-                    self.SID[etag]['type']='Button'
-                elif ZBids[sid]['modelid'] == 'lumi.weather':
-                    self.SID[etag]['type']='MultiSensor'
-                elif ZBids[sid]['modelid'] == 'lumi.sensor_magnet.aq2':
-                    self.SID[etag]['type']='MagSwitch'
-                elif ZBids[sid]['modelid'] == 'PHDL00':
-                    self.SID[etag]['type']='Controller'
-                else:
-                    self.SID[etag]['type']='N/A'
+#                 if ZBids[sid]['modelid'] == 'lumi.remote.b1acn01':
+#                     self.SID[etag]['type']='Button'
+#                 elif ZBids[sid]['modelid'] == 'lumi.weather':
+#                     self.SID[etag]['type']='MultiSensor'
+#                 elif ZBids[sid]['modelid'] == 'lumi.sensor_magnet.aq2':
+#                     self.SID[etag]['type']='MagSwitch'
+#                 elif ZBids[sid]['modelid'] == 'PHDL00':
+#                     self.SID[etag]['type']='Controller'
+#                 else:
+#                     self.SID[etag]['type']='N/A'
 
-            if 'config' in ZBids[sid]:    
-                if 'battery' in ZBids[sid]['config']:
-                    self.SID[etag]['battery']=ZBids[sid]['config']['battery']
-                if 'temperature' in ZBids[sid]['config']:
-                    self.SID[etag]['temp']=ZBids[sid]['config']['temperature']
+#             if 'config' in ZBids[sid]:    
+#                 if 'battery' in ZBids[sid]['config']:
+#                     self.SID[etag]['battery']=ZBids[sid]['config']['battery']
+#                 if 'temperature' in ZBids[sid]['config']:
+#                     self.SID[etag]['temp']=ZBids[sid]['config']['temperature']
 
-            if 'state' in ZBids[sid]:
-                if 'temperature' in ZBids[sid]['state']:
-                    self.SID[etag]['temp']=ZBids[sid]['state']['temperature']                    
-                if 'humidity' in ZBids[sid]['state']:
-                    self.SID[etag]['hum']=ZBids[sid]['state']['humidity']                    
-                if 'pressure' in ZBids[sid]['state']:
-                    self.SID[etag]['Pres']=ZBids[sid]['state']['pressure']                    
-                if 'open' in ZBids[sid]['state']:
-                    self.SID[etag]['open']=ZBids[sid]['state']['open']
-                if 'lastupdated' in ZBids[sid]['state']:
-                    self.SID[etag]['lastupdated']=ZBids[sid]['state']['lastupdated']
+#             if 'state' in ZBids[sid]:
+#                 if 'temperature' in ZBids[sid]['state']:
+#                     self.SID[etag]['temp']=ZBids[sid]['state']['temperature']                    
+#                 if 'humidity' in ZBids[sid]['state']:
+#                     self.SID[etag]['hum']=ZBids[sid]['state']['humidity']                    
+#                 if 'pressure' in ZBids[sid]['state']:
+#                     self.SID[etag]['Pres']=ZBids[sid]['state']['pressure']                    
+#                 if 'open' in ZBids[sid]['state']:
+#                     self.SID[etag]['open']=ZBids[sid]['state']['open']
+#                 if 'lastupdated' in ZBids[sid]['state']:
+#                     self.SID[etag]['lastupdated']=ZBids[sid]['state']['lastupdated']
 
-        for sid in self.SID:
-            print(self.SID[sid])
-        for sid in self.SIDX:
-            print(sid+':'+self.SIDX[sid])
+#         for sid in self.SID:
+#             print(self.SID[sid])
+#         for sid in self.SIDX:
+#             print(sid+':'+self.SIDX[sid])
 
-        self.ids = ZBids   #  Json DICT
+#         self.ids = ZBids   #  Json DICT
 
-    def GetTYPE(self,ZBid):
-        Etag=self.SIDX[ZBid]
-        return self.SID[Etag]['type']
-    def GetNAME(self,ZBid):
-        Etag=self.SIDX[ZBid]
-        return self.SID[Etag]['name']
-    def GetSENSOR(self,ZBid):
-        Etag=self.SIDX[ZBid]
-        return self.SID[Etag] 
-    def UpdSENSOR(self,Sid):
-        ZBid = Sid['id']
-        etag=self.SIDX[ZBid]
-        if 'lastupdated' in Sid['state']:
-            self.SID[etag]['lastupdated']=Sid['state']['lastupdated']
-        if 'humidity' in Sid['state']:
-            print(str(ZBid)+' - Hum was '+str(self.SID[etag]['hum'])+' Now '+str(Sid['state']['humidity']))
-            self.SID[etag]['hum']=Sid['state']['humidity']
-        if 'temperature' in Sid['state']:
-            print(str(ZBid)+' - Temp was '+str(self.SID[etag]['temp'])+' Now '+str(Sid['state']['temperature']))
-            self.SID[etag]['temp']=Sid['state']['temperature']
-        if 'pressure' in Sid:
-            self.SID[etag]['pres']=Sid['state']['pressure']
-    def CheckBATTERY(self):
-        prvEid=' '
-        for sid in self.ids:
-            if 'battery' in self.ids[sid]['config'] and prvEid != self.ids[sid]['etag'] :
-                if self.ids[sid]['config']['battery'] != None:
-                    if int(self.ids[sid]['config']['battery']) < 40 :
-                        prvEid=self.ids[sid]['etag']
-                        Alert("Battery",1,self.ids[sid]['name']+' Sensor  battery @ '+str(self.ids[sid]['config']['battery'])+'%  ['+prvEid+']' )
+#     def GetTYPE(self,ZBid):
+#         Etag=self.SIDX[ZBid]
+#         return self.SID[Etag]['type']
+#     def GetNAME(self,ZBid):
+#         Etag=self.SIDX[ZBid]
+#         return self.SID[Etag]['name']
+#     def GetSENSOR(self,ZBid):
+#         Etag=self.SIDX[ZBid]
+#         return self.SID[Etag] 
+#     def UpdSENSOR(self,Sid):
+#         ZBid = Sid['id']
+#         etag=self.SIDX[ZBid]
+#         if 'lastupdated' in Sid['state']:
+#             self.SID[etag]['lastupdated']=Sid['state']['lastupdated']
+#         if 'humidity' in Sid['state']:
+#             print(str(ZBid)+' - Hum was '+str(self.SID[etag]['hum'])+' Now '+str(Sid['state']['humidity']))
+#             self.SID[etag]['hum']=Sid['state']['humidity']
+#         if 'temperature' in Sid['state']:
+#             print(str(ZBid)+' - Temp was '+str(self.SID[etag]['temp'])+' Now '+str(Sid['state']['temperature']))
+#             self.SID[etag]['temp']=Sid['state']['temperature']
+#         if 'pressure' in Sid:
+#             self.SID[etag]['pres']=Sid['state']['pressure']
+#     def CheckBATTERY(self):
+#         prvEid=' '
+#         for sid in self.ids:
+#             if 'battery' in self.ids[sid]['config'] and prvEid != self.ids[sid]['etag'] :
+#                 if self.ids[sid]['config']['battery'] != None:
+#                     if int(self.ids[sid]['config']['battery']) < 40 :
+#                         prvEid=self.ids[sid]['etag']
+#                         Alert("Battery",1,self.ids[sid]['name']+' Sensor  battery @ '+str(self.ids[sid]['config']['battery'])+'%  ['+prvEid+']' )
 
 class GPIOpins:
     # store the GPIO.ini here and allocate GPIO methods here 

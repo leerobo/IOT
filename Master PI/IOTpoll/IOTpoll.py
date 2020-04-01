@@ -20,6 +20,7 @@ import configparser
 import time
 import http.client
 import json
+import ZigBee as ZB
 
 import sys
 import os
@@ -32,6 +33,7 @@ from array import array
 import Adafruit_DHT
 import logging
 import socketserver
+import requests
 
 Ddir='/sys/bus/w1/devices/'
 configPOLL = configparser.ConfigParser()
@@ -42,6 +44,7 @@ GaugeW1={"DEF":20}   # W1 Sensors
 GaugePIN={"DEF":20}  # Activate Pins
 Vers='1.1.0'
 MID='XX'
+ZBc = ZB
 
 # -----------------------------------------------------------------
 #    Wire-1 : Wire 1 functions and routines 
@@ -94,6 +97,19 @@ def LISTswitches(SIDs):
                     SIDs[int(pin)]=1
 
     return SIDs
+
+# -----------------------------------------------------------------
+#    ZigBee Sensors
+# -----------------------------------------------------------------
+
+def ZBpoll():
+    if 'ZIGBEE' not in configPOLL: return False
+    params = {"words": 10, "paragraphs": 1, "format": "json"}
+    response = requests.get(f"http://"+configPOLL["ZIGBEE"]["ip"]+"/api/"+configPOLL["ZIGBEE"]["key"]+"/sensors/")
+    if response.status_code != 200:
+        print("ZigBee Return Error : "+str(response.status_code))
+        return True
+    ZB.ZBsensors(response.json())   #  Store Sensors in ZigBee Class
 
 # -----------------------------------------------------------------
 #   Relays : Controllers for Relays
@@ -312,6 +328,7 @@ def main():
     global GaugeW1
     SendMSG('Version '+Vers)
     if ValidatePARMS(): return
+    if ZBsetup(): return
 
 # Start Promethus Server
     start_http_server(PortNo)
@@ -348,7 +365,7 @@ def main():
                 UpdPromethues('W1',sid,val)
             else:
                 DelPromethues('W1',sid)
-                SendMSG('Sensor Error : '+sid)    
+                SendMSG('Sensor Error : '+sid)
 
         # Read Pins
         for Pin in configPINS:
@@ -371,6 +388,9 @@ def main():
                     UpdPromethues('PIN','MOTION_'+Pin,RelayGET(Pin) )
                 else:
                     SendMSG("Pin Unknown Type : "+configPINS[Pin]["Type"])
+
+        
+            
 
         GapCnt=0
         SendMSG("Polled Internally")
