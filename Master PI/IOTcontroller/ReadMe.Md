@@ -1,4 +1,14 @@
-Setup SOP
+
+IOT Controller 
+Polls the sensors and sets the relays depending on the settings.   This code if fairly easy 
+to follow and you can put what ever you need in this section depending upon your needs
+
+This one is set to control 2 extract fans ,  one in the bedroom and one in the bathroom 
+if the humditiy or temperture gets to high..
+
+
+
+Setup
 
 sudo apt install python3-gpiozero
 pip3 install pynetgear
