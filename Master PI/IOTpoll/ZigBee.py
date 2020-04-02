@@ -4,14 +4,14 @@ class ZBsensors:
     def __init__(self,ZBSensors):
         self.SIDX={}
         self.SID={}
+        self.ZBraw={}
 
          # Break Sensors into a easier format to read/update
         for sid in ZBSensors:
             self.SIDX[sid]=ZBSensors[sid]['etag']
             etag=ZBSensors[sid]['etag']
-
+            
             if etag not in self.SID:
-                print(ZBSensors[sid]['name']+' Sensor Found '+etag)
                 self.SID[etag]={}
                 self.SID[etag]['name']=ZBSensors[sid]['name']
                 self.SID[etag]['modelid']=ZBSensors[sid]['modelid']
@@ -44,11 +44,35 @@ class ZBsensors:
                     self.SID[etag]['open']=ZBSensors[sid]['state']['open']
                 if 'lastupdated' in ZBSensors[sid]['state']:
                     self.SID[etag]['lastupdated']=ZBSensors[sid]['state']['lastupdated']
+          
+        for sid in ZBSensors:
+            ky='ZB_'+ZBSensors[sid]['name'].replace(' ','_')
+            ky=ky+'_'+ZBSensors[sid]['modelid'].replace('.','_')
+            
+            if 'config' in ZBSensors[sid]:    
+                if 'battery' in ZBSensors[sid]['config']:
+                    self.ZBraw[ky+'_battery']=int(ZBSensors[sid]['config']['battery'])
+                if 'temperature' in ZBSensors[sid]['config']:
+                    self.ZBraw[ky+'_Temp']=float(ZBSensors[sid]['config']['temperature']/100)
 
-        for sid in self.SID:
-            print(self.SID[sid])
-        for sid in self.SIDX:
-            print(sid+':'+self.SIDX[sid])
+            if 'state' in ZBSensors[sid]:
+                if 'temperature' in ZBSensors[sid]['state']:
+                    self.ZBraw[ky+'_Temp']=float(ZBSensors[sid]['state']['temperature']/100)
+                if 'humidity' in ZBSensors[sid]['state']:
+                    self.ZBraw[ky+'_Hum']=float(ZBSensors[sid]['state']['humidity']/100)
+                if 'pressure' in ZBSensors[sid]['state']:
+                    self.ZBraw[ky+'_Pressure']=int(ZBSensors[sid]['state']['pressure'])
+                if 'open' in ZBSensors[sid]['state']:
+                    if ZBSensors[sid]['state']['open'] == True:
+                        self.ZBraw[ky+'_Open']=1
+                    else:
+                        self.ZBraw[ky+'_Open']=0        
+
+        # for sid in self.ZBraw:
+        #     print(sid)
+        #     print(self.ZBraw[sid])                
+        # for sid in self.SID:
+        #     print(self.SID[sid])
 
     def GetTYPE(self,ZBid):
         Etag=self.SIDX[ZBid]
@@ -61,6 +85,9 @@ class ZBsensors:
     def GetSENSOR(self,ZBid):
         Etag=self.SIDX[ZBid]
         return self.SID[Etag] 
+
+    def GetALL(self):       # Return Key,Val list
+        return self.ZBraw
 
     def UpdSENSOR(self,Sid):
         ZBid = Sid['id']

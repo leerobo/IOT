@@ -40,8 +40,7 @@ configPOLL = configparser.ConfigParser()
 configPINS = configparser.ConfigParser()
 KillSwitch = True
 POLLlst={"DEF":0}
-GaugeW1={"DEF":20}   # W1 Sensors
-GaugePIN={"DEF":20}  # Activate Pins
+GaugeINT={"DEF":40}     # Internal Sensors List
 Vers='1.1.0'
 MID='XX'
 ZBc = ZB
@@ -50,7 +49,8 @@ ZBc = ZB
 #    Wire-1 : Wire 1 functions and routines 
 # -----------------------------------------------------------------
 
-def LISTwire1(SIDs):
+def LISTwire1():
+    SIDs={}
     devicelist = glob.glob(Ddir+'28*')    
     if devicelist=='':
         return SIDs
@@ -58,7 +58,7 @@ def LISTwire1(SIDs):
         for device in devicelist:
             TT=device.split("/")
             SID = TT[len(TT)-1]
-            SIDs.append('W_S'+SID[3:])
+            SIDs['W1_S'+SID[3:]]=GETwire1(TT[len(TT)-1])
     return SIDs
 
 # Get Sensor Reading
@@ -103,17 +103,41 @@ def LISTswitches(SIDs):
 # -----------------------------------------------------------------
 
 def ZBpoll():
-    if 'ZIGBEE' not in configPOLL: return False
+    if 'ZIGBEE' not in configPOLL: return SIDzb
     params = {"words": 10, "paragraphs": 1, "format": "json"}
     response = requests.get(f"http://"+configPOLL["ZIGBEE"]["ip"]+"/api/"+configPOLL["ZIGBEE"]["key"]+"/sensors/")
     if response.status_code != 200:
         print("ZigBee Return Error : "+str(response.status_code))
         return True
-    ZB.ZBsensors(response.json())   #  Store Sensors in ZigBee Class
+    ZBc=ZB.ZBsensors(response.json())   #  Store Sensors in ZigBee Class
+    return ZBc.GetALL()
 
 # -----------------------------------------------------------------
-#   Relays : Controllers for Relays
+#   PIN : Controllers 
 # -----------------------------------------------------------------
+
+def PINpoll():
+    # Read Pins
+    SID={}
+    for Pin in configPINS:
+        if Pin != 'DEFAULT':
+            Sname=configPINS[Pin]['NAME'].replace(' ','_')
+            if configPINS[Pin]["Type"]=='AM2302' or configPINS[Pin]["Type"]=='DHT22':
+                humidity,temperature = Adafruit_DHT.read_retry(22, Pin)
+                if isinstance(temperature, float):
+                    SID['PIN_DHT22_'+Pin+'_'+Sname+'_TEMP']=temperature
+                if isinstance(humidity, float):
+                    SID['PIN_DHT22_'+Pin+'_'+Sname+'_HUM']=temperature
+
+            elif configPINS[Pin]["Type"]=='Relay':
+                SID['PIN_RELAY_'+Pin+'_'+Sname]=RelayGET(Pin)
+
+            elif configPINS[Pin]["Type"]=='Switch':
+                SID['PIN_SWITCH_'+Pin+'_'+Sname]=RelayGET(Pin)
+
+            elif configPINS[Pin]["Type"]=='Motion':
+                SID['PIN_MOTION_'+Pin+'_'+Sname]=RelayGET(Pin)
+    return SID
 
 # Return Pin ON/OFF status
 def RelayGET(PIN):
@@ -133,10 +157,6 @@ def RelayTOGGLE(PIN):
        GPIO.output(int(PIN), GPIO.HIGH)
        return "1"        
     sys.stdout.flush()  
-
-# -------------------------------------------------------------------
-#  PIN Setup : Setup Pins settings
-# -------------------------------------------------------------------
 
 def SETpins():
     GPIO.setwarnings(False) 
@@ -166,49 +186,32 @@ def SETpins():
 #   Promethues : Comms to Promethus Server 
 # ------------------------------------------------------------------------
 
-def DelPromethues(typ,key):
-    global GaugePIN
-    global GaugeW1
+def DelPromethues(key):
+    global GaugeINT
     Mkey = MID + '_' + key
-    SendMSG('DEL:'+Mkey+' - '+typ+' - '+key )    
-    if typ=='W1' and key in GaugeW1:
+    if Mkey in GaugeINT:
         GaugeW1.pop(key)
-    elif  typ=='PIN' and key in GaugePIN:
-        GaugePIN.pop(key)
 
-def UpdPromethues(typ,key,val):
-    global GaugePIN
-    global GaugeW1
+def UpdPromethues(key,val):
+    global GaugeINT
     Mkey = MID + '_' + key
-    if not isSetPromethues(typ,key):
-        AddPromethues(typ,key)
-        SendMSG('New '+typ+' Allocation : '+key)
-    if typ=='W1' and key in GaugeW1:
-        GaugeW1[key].set(val)
-    elif  typ=='PIN' and key in GaugePIN:
-        SendMSG('UPD '+typ+' PIN : '+key+'  VAL : '+str(val))
-        GaugePIN[key].set(val)
+    if not isSetPromethues(key):
+        AddPromethues(key)
+    if Mkey in GaugeINT:
+        GaugeINT[Mkey].set(val)
 
-def AddPromethues(typ,key):
-    global GaugePIN
-    global GaugeW1
+def AddPromethues(key):
+    global GaugeINT
     Mkey = MID + '_' + key
-    SendMSG('ADD:'+Mkey+' - '+typ+' - '+key)
-    if  typ == 'W1' and not key in GaugeW1:
-        GaugeW1[key]=Gauge(Mkey,key)
-        GaugeW1[key].set_function(POLLEDgauge,key)
-    elif typ == 'PIN' and not key in GaugePIN:
-        GaugePIN[key]=Gauge(Mkey,key)
-        # GaugePIN[key].set_function(POLLEDgauge,key)
+    if  key not in GaugeINT:
+        GaugeINT[Mkey]=Gauge(Mkey,key)
             
 def POLLEDgauge(key):
     SendMSG('Polled Gauge '+str(key))
     
-def isSetPromethues(typ,key):
+def isSetPromethues(key):
     Mkey = MID + '_' + key
-    if typ == 'W1' and not key in GaugeW1:
-        return False
-    elif typ == 'PIN' and not key in GaugePIN:
+    if Mkey not in GaugeINT:
         return False
     else:
         return True
@@ -224,6 +227,7 @@ def ValidatePARMS():
 
     configPOLL.read('POLL.ini')
     configPINS.read('PINS.ini')
+
     if "location" not in configPOLL["POLL"]:
         SendMSG('location missing from Config - Job Terminated')
         return True
@@ -325,10 +329,8 @@ def apiRELAY(qsp):
 # ---------------------------------------------------------------------------
 
 def main():
-    global GaugeW1
     SendMSG('Version '+Vers)
     if ValidatePARMS(): return
-    if ZBsetup(): return
 
 # Start Promethus Server
     start_http_server(PortNo)
@@ -343,62 +345,30 @@ def main():
 
 # Main Loop
     while KillSwitch:
-        SIDs=[]    
-        SIDs=LISTwire1(SIDs)       # Wire-1 Sensor Controls
+        SIDs={}                      # Activate Sensors
+        SIDs=LISTwire1()             # Wire-1 Sensor Controls
+        PNs=PINpoll()                # Pin Poll 
+        SIDs = {**SIDs, **PNs}   
+        if 'ZIGBEE' in configPOLL:   # ZigBee Poll
+            ZBs=ZBpoll()
+            SIDs = {**SIDs, **ZBs}   
 
-        # Remove Dead Sensors
-        for ActSid in GaugeW1:
-            if ActSid != 'DEF' and ActSid not in SIDs:
-                DelPromethues('W1',ActSid)
-                SendMSG('Sensor Lost : '+ActSid)
+        for ActSid in GaugeINT:      # Remove Dead Sensors
+            if ActSid not in SIDs:
+                DelPromethues(ActSid)
 
-        # Add New Sensors
-        for sid in SIDs:
-            if not isSetPromethues('W1',sid):
-                AddPromethues('W1',sid)
-                SendMSG('New Sensor : '+sid)
+        for sid in SIDs:             # Add New Sensors
+            if not isSetPromethues(sid):
+                AddPromethues(sid)
 
-        # Read Sensors
-        for sid in SIDs:
-            val = GETwire1('28-'+sid[3:])
-            if val != -999:
-                UpdPromethues('W1',sid,val)
-            else:
-                DelPromethues('W1',sid)
-                SendMSG('Sensor Error : '+sid)
-
-        # Read Pins
-        for Pin in configPINS:
-            if Pin != "DEFAULT":
-                
-                if configPINS[Pin]["Type"]=='AM2302' or configPINS[Pin]["Type"]=='DHT22':
-                    humidity,temperature = Adafruit_DHT.read_retry(22, Pin)
-                    if isinstance(temperature, float):
-                        UpdPromethues('PIN','DHT22_'+Pin+'_TEMP',temperature)
-                    if isinstance(humidity, float):
-                        UpdPromethues('PIN','DHT22_'+Pin+'_HUM',humidity)
-
-                elif configPINS[Pin]["Type"]=='Relay':
-                    UpdPromethues('PIN','RELAY_'+Pin,RelayGET(Pin) )
-
-                elif configPINS[Pin]["Type"]=='Switch':
-                    UpdPromethues('PIN','SWITCH_'+Pin,RelayGET(Pin) )
-
-                elif configPINS[Pin]["Type"]=='Motion':
-                    UpdPromethues('PIN','MOTION_'+Pin,RelayGET(Pin) )
-                else:
-                    SendMSG("Pin Unknown Type : "+configPINS[Pin]["Type"])
-
-        
-            
+        for sid in SIDs:             # Update Sensors
+            UpdPromethues(sid,SIDs[sid])
 
         GapCnt=0
-        SendMSG("Polled Internally")
         while GapCnt <= POLLgap:
             time.sleep(1)
             httpd.handle_request() # Poll API Getway
             GapCnt+=1
-
 
     sys.stdout.flush()  
 
