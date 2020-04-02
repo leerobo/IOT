@@ -11,6 +11,9 @@
 #  
 # ----------------------------------------------------------------------------
 
+import sys
+sys.path.append('../Common')
+
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from prometheus_client import start_http_server, Gauge
 
@@ -22,7 +25,6 @@ import http.client
 import json
 import ZigBee as ZB
 
-import sys
 import os
 import time
 import datetime

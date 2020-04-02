@@ -21,7 +21,9 @@
 #  
 # ----------------------------------------------------------------------------
 
-# from http.server import BaseHTTPRequestHandler, HTTPServer
+import sys
+sys.path.append('../Common')
+
 from pynetgear import Netgear
 import requests
 from gpiozero import LED, Button
@@ -42,7 +44,7 @@ import configparser
 import http.client
 import json
 
-import sys
+
 import os
 import time
 import glob
@@ -236,7 +238,7 @@ def ZBsetup():
     ZBSensors=response.json()
     print("ZigBee Sensors Set")
     ZBsensorC = ZBsensors(response.json())  #  Store Sensors
-    ZBsensorC.CheckBATTERY()                #  Check Batterys
+    #ZBsensorC.CheckBATTERY()                #  Check Batterys
 
     params = {"words": 10, "paragraphs": 1, "format": "json"}
     response = requests.get(f"http://"+cntlINI["ZIGBEE"]["ip"]+"/api/"+cntlINI["ZIGBEE"]["key"]+"/config")
