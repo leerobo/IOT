@@ -123,30 +123,30 @@ def PINpoll():
     SID={}
     for Pin in configPINS:
         if Pin != 'DEFAULT':
-            Sname=configPINS[Pin]['NAME'].replace(' ','_')
-            if configPINS[Pin]["Type"]=='AM2302' or configPINS[Pin]["Type"]=='DHT22':
+            Sname=configPINS[Pin]['name'].replace(' ','_')
+            if configPINS[Pin]["type"]=='AM2302' or configPINS[Pin]["type"]=='DHT22':
                 humidity,temperature = Adafruit_DHT.read_retry(22, Pin)
                 if isinstance(temperature, float):
                     SID['PIN_DHT22_'+Pin+'_'+Sname+'_TEMP']=temperature
                 if isinstance(humidity, float):
                     SID['PIN_DHT22_'+Pin+'_'+Sname+'_HUM']=temperature
 
-            elif configPINS[Pin]["Type"]=='Relay':
+            elif configPINS[Pin]["type"]=='relay':
                 SID['PIN_RELAY_'+Pin+'_'+Sname]=RelayGET(Pin)
 
-            elif configPINS[Pin]["Type"]=='Switch':
+            elif configPINS[Pin]["type"]=='switch':
                 SID['PIN_SWITCH_'+Pin+'_'+Sname]=RelayGET(Pin)
 
-            elif configPINS[Pin]["Type"]=='Motion':
+            elif configPINS[Pin]["type"]=='motion':
                 SID['PIN_MOTION_'+Pin+'_'+Sname]=RelayGET(Pin)
     return SID
 
 # Return Pin ON/OFF status
 def RelayGET(PIN):
     if GPIO.input(int(PIN)):
-        return 1  
+        return 0  
     else:
-        return 0   
+        return 1   
     sys.stdout.flush()
 
 # Toggle Pin
@@ -163,23 +163,22 @@ def RelayTOGGLE(PIN):
 def SETpins():
     GPIO.setwarnings(False) 
     GPIO.setmode(GPIO.BCM)
-
     for pin in configPINS:
         if pin != 'DEFAULT':
-            if configPINS[pin]["Type"]=='Relay':
-                SendMSG('TYPE:RELAY'+'-'+str(pin)+' '+configPINS[pin]['NAME']+' Initialised')
+            if configPINS[pin]["type"]=='relay':
+                SendMSG('TYPE:RELAY'+'-'+str(pin)+' '+configPINS[pin]['name']+' Initialised')
                 GPIO.setup(int(pin), GPIO.OUT)
                 GPIO.output(int(pin), GPIO.HIGH)
 
-            if configPINS[pin]["Type"]=='AM2302' or  configPINS[pin]["Type"]=='DHT22':
-                SendMSG('TYPE:HUM/TEMP'+'-'+str(pin)+' '+configPINS[pin]['NAME'])
+            if configPINS[pin]["type"]=='AM2302' or  configPINS[pin]["Type"]=='DHT22':
+                SendMSG('TYPE:HUM/TEMP'+'-'+str(pin)+' '+configPINS[pin]['name'])
 
-            if configPINS[pin]["Type"]=='Switch':
-                SendMSG('TYPE:SWITCH'+'-'+str(pin)+' '+configPINS[pin]['NAME']+' Initialised')
+            if configPINS[pin]["type"]=='switch':
+                SendMSG('TYPE:SWITCH'+'-'+str(pin)+' '+configPINS[pin]['name']+' Initialised')
                 GPIO.setup(int(pin), GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-            if configPINS[pin]["Type"]=='Motion':
-                SendMSG('TYPE:Motion'+'-'+str(pin)+' '+configPINS[pin]['NAME']+' Initialised')
+            if configPINS[pin]["type"]=='motion':
+                SendMSG('TYPE:Motion'+'-'+str(pin)+' '+configPINS[pin]['name']+' Initialised')
                 GPIO.setup(int(pin), GPIO.IN, pull_up_down=GPIO.PUD_UP)
              
     #sys.stdout.flush()  
@@ -200,6 +199,7 @@ def UpdPromethues(key,val):
     if not isSetPromethues(key):
         AddPromethues(key)
     if Mkey in GaugeINT:
+        # print('UPD'+Mkey+'-'+str(val))
         GaugeINT[Mkey].set(val)
 
 def AddPromethues(key):
@@ -350,11 +350,14 @@ def main():
         SIDs={}                      # Activate Sensors
         SIDs=LISTwire1()             # Wire-1 Sensor Controls
         PNs=PINpoll()                # Pin Poll 
+        print(PNs)
         SIDs = {**SIDs, **PNs}   
+
         if 'ZIGBEE' in configPOLL:   # ZigBee Poll
             ZBs=ZBpoll()
             SIDs = {**SIDs, **ZBs}   
 
+        print(SIDs)
         for ActSid in GaugeINT:      # Remove Dead Sensors
             if ActSid not in SIDs:
                 DelPromethues(ActSid)

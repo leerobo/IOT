@@ -1,11 +1,27 @@
+import requests
+
 class ZBsensors:
+
     # Store Sensors available to ZigBee and routines to extract/update info
 
-    def __init__(self,ZBSensors):
+    def __init__(self,ZBip,ZBkey):
         self.SIDX={}
         self.SID={}
         self.ZBraw={}
 
+        #params = {"words": 10, "paragraphs": 1, "format": "json"}
+        response = requests.get(f"http://"+ZBip+"/api/"+ZBkey+"/sensors/")
+        if response.status_code != 200:
+            return False
+        self.RequestSENSORS(response.json())
+
+        #params = {"words": 10, "paragraphs": 1, "format": "json"}
+        response = requests.get(f"http://"+ZBip+"/api/"+ZBkey+"/config")
+        if response.status_code != 200:
+            return True
+        self.RequestCONFIG(response.json())
+
+    def RequestSENSORS(self,ZBSensors):
          # Break Sensors into a easier format to read/update
         for sid in ZBSensors:
             self.SIDX[sid]=ZBSensors[sid]['etag']
@@ -15,7 +31,6 @@ class ZBsensors:
                 self.SID[etag]={}
                 self.SID[etag]['name']=ZBSensors[sid]['name']
                 self.SID[etag]['modelid']=ZBSensors[sid]['modelid']
-
                 if ZBSensors[sid]['modelid'] == 'lumi.remote.b1acn01':
                     self.SID[etag]['type']='Button'
                 elif ZBSensors[sid]['modelid'] == 'lumi.weather':
@@ -48,7 +63,7 @@ class ZBsensors:
         for sid in ZBSensors:
             ky='ZB_'+ZBSensors[sid]['name'].replace(' ','_')
             ky=ky+'_'+ZBSensors[sid]['modelid'].replace('.','_')
-            
+           
             if 'config' in ZBSensors[sid]:    
                 if 'battery' in ZBSensors[sid]['config']:
                     self.ZBraw[ky+'_battery']=int(ZBSensors[sid]['config']['battery'])
@@ -68,11 +83,9 @@ class ZBsensors:
                     else:
                         self.ZBraw[ky+'_Open']=0        
 
-        # for sid in self.ZBraw:
-        #     print(sid)
-        #     print(self.ZBraw[sid])                
-        # for sid in self.SID:
-        #     print(self.SID[sid])
+    def RequestCONFIG(self,ZBconfig):
+         # Break Sensors into a easier format to read/update
+        self.ZBconfig = ZBconfig
 
     def GetTYPE(self,ZBid):
         Etag=self.SIDX[ZBid]
@@ -88,6 +101,12 @@ class ZBsensors:
 
     def GetALL(self):       # Return Key,Val list
         return self.ZBraw
+
+
+    def Validate(self,ZBid):  # Check if Sensor is set
+        if ZBid in self.SID[ZBid]:
+            return True
+        return False
 
     def UpdSENSOR(self,Sid):
         ZBid = Sid['id']
@@ -111,3 +130,8 @@ class ZBsensors:
                     if int(self.ids[sid]['config']['battery']) < 40 :
                         prvEid=self.ids[sid]['etag']
                         Alert("Battery",1,self.ids[sid]['name']+' Sensor  battery @ '+str(self.ids[sid]['config']['battery'])+'%  ['+prvEid+']' )
+
+    def configPORT(self):       # Return Socket Port number
+        if 'websocketport' in self.ZBconfig:
+            return self.ZBconfig[websocketport]
+        return 80

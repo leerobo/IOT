@@ -26,11 +26,8 @@ sudo nano /lib/systemd/system/IOTpoll.service
  [Install]
  WantedBy=multi-user.target
 
- sudo chmod 644 /lib/systemd/system/IOTpoll.service
-
+sudo chmod 644 /lib/systemd/system/IOTpoll.service
 sudo systemctl daemon-reload
 sudo systemctl enable IOTpoll.service
 sudo systemctl start IOTpoll.service
 sudo systemctl status IOTpoll.service
-
-
