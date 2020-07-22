@@ -34,7 +34,7 @@ http://192.168.2.19:18100/?API=7483&TYP=RLY&RLY=6   // toggle
 
 
 
-Gmail code : snwbjmytecqitgpn
+Gmail code : sdfghiuytr765
 
 
 IOTcontroller.py
