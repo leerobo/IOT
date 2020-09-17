@@ -23,7 +23,7 @@ import configparser
 import time
 import http.client
 import json
-import ZigBee as ZB
+from ZigBee import ZBsensors
 
 import os
 import time
@@ -45,7 +45,6 @@ POLLlst={"DEF":0}
 GaugeINT={"DEF":40}     # Internal Sensors List
 Vers='1.1.0'
 MID='XX'
-ZBc = ZB
 
 # -----------------------------------------------------------------
 #    Wire-1 : Wire 1 functions and routines 
@@ -105,14 +104,19 @@ def LISTswitches(SIDs):
 # -----------------------------------------------------------------
 
 def ZBpoll():
-    if 'ZIGBEE' not in configPOLL: return SIDzb
-    params = {"words": 10, "paragraphs": 1, "format": "json"}
-    response = requests.get(f"http://"+configPOLL["ZIGBEE"]["ip"]+"/api/"+configPOLL["ZIGBEE"]["key"]+"/sensors/")
-    if response.status_code != 200:
-        print("ZigBee Return Error : "+str(response.status_code))
-        return True
-    ZBc=ZB.ZBsensors(response.json())   #  Store Sensors in ZigBee Class
-    return ZBc.GetALL()
+    global ZBconfig, ZBsensors, ZBsensorC, LockSys
+    LockSys = datetime.datetime.today()
+    ZBsensorC = ZBsensors(configPOLL["ZIGBEE"]["ip"],configPOLL["ZIGBEE"]["key"])
+    return ZBsensorC.GetALL()
+
+    #if 'ZIGBEE' not in configPOLL: return SIDzb
+    #params = {"words": 10, "paragraphs": 1, "format": "json"}
+    #response = requests.get(f"http://"+configPOLL["ZIGBEE"]["ip"]+"/api/"+configPOLL["ZIGBEE"]["key"]+"/sensors/")
+    #if response.status_code != 200:
+    #    print("ZigBee Return Error : "+str(response.status_code))
+    #    return True
+    #ZBc=ZB.ZBsensors(response.json())   #  Store Sensors in ZigBee Class
+    #return ZBc.GetALL()
 
 # -----------------------------------------------------------------
 #   PIN : Controllers 
@@ -255,7 +259,6 @@ def ValidatePARMS():
     SETpins()
     return False
 
-
 # --------------------------------------------------------------------------
 
 def SendMSG(msg):
@@ -285,7 +288,6 @@ class gpioHTTPServer_RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain")
         self.end_headers()
         self.wfile.write(bytes("OK","utf8"))
-
 
 # -----------------------------------------------------------------------
 #    Incoming API handler 
@@ -349,15 +351,17 @@ def main():
     while KillSwitch:
         SIDs={}                      # Activate Sensors
         SIDs=LISTwire1()             # Wire-1 Sensor Controls
+        print('SID:',SIDs)
+
         PNs=PINpoll()                # Pin Poll 
         print(PNs)
         SIDs = {**SIDs, **PNs}   
 
         if 'ZIGBEE' in configPOLL:   # ZigBee Poll
             ZBs=ZBpoll()
+            print('ZBs:',ZBs)
             SIDs = {**SIDs, **ZBs}   
 
-        print(SIDs)
         for ActSid in GaugeINT:      # Remove Dead Sensors
             if ActSid not in SIDs:
                 DelPromethues(ActSid)
@@ -372,7 +376,7 @@ def main():
         GapCnt=0
         while GapCnt <= POLLgap:
             time.sleep(1)
-            httpd.handle_request() # Poll API Getway
+            httpd.handle_request()   # Poll API Getway
             GapCnt+=1
 
     sys.stdout.flush()  

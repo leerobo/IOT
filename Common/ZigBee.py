@@ -63,14 +63,22 @@ class ZBsensors:
         for sid in ZBSensors:
             ky='ZB_'+ZBSensors[sid]['name'].replace(' ','_')
             ky=ky+'_'+ZBSensors[sid]['modelid'].replace('.','_')
-           
-            if 'config' in ZBSensors[sid]:    
+
+            LostSensor=False
+            if 'config' in ZBSensors[sid]:  
+                if 'reachable' in ZBSensors[sid]['config']:
+                    if ZBSensors[sid]['config']['reachable'] == False:
+                        print(ky,':Lost Sensor')
+                        LostSensor=True
+
+            if 'config' in ZBSensors[sid] and not LostSensor:  
                 if 'battery' in ZBSensors[sid]['config']:
-                    self.ZBraw[ky+'_battery']=int(ZBSensors[sid]['config']['battery'])
+                    if ZBSensors[sid]['config']['battery'] != 'None':
+                        self.ZBraw[ky+'_battery']=int(ZBSensors[sid]['config']['battery'])
                 if 'temperature' in ZBSensors[sid]['config']:
                     self.ZBraw[ky+'_Temp']=float(ZBSensors[sid]['config']['temperature']/100)
 
-            if 'state' in ZBSensors[sid]:
+            if 'state' in ZBSensors[sid] and not LostSensor:  
                 if 'temperature' in ZBSensors[sid]['state']:
                     self.ZBraw[ky+'_Temp']=float(ZBSensors[sid]['state']['temperature']/100)
                 if 'humidity' in ZBSensors[sid]['state']:
