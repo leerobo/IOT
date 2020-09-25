@@ -9,20 +9,34 @@ class ZBsensors:
         self.SID={}
         self.ZBraw={}
 
-        #params = {"words": 10, "paragraphs": 1, "format": "json"}
+        # Get Sensor list
         response = requests.get(f"http://"+ZBip+"/api/"+ZBkey+"/sensors/")
         if response.status_code != 200:
             return False
+        # print("Sensors:",response.json())
         self.RequestSENSORS(response.json())
 
-        #params = {"words": 10, "paragraphs": 1, "format": "json"}
+        # Get conroller settings
         response = requests.get(f"http://"+ZBip+"/api/"+ZBkey+"/config")
         if response.status_code != 200:
             return True
+        # print("Controller:",response.json())
         self.RequestCONFIG(response.json())
+
+    def RefrestSENSORS(self):
+        # Connect to Zigbee controller
+        response = requests.get(f"http://"+ZBip+"/api/"+ZBkey+"/sensors/")
+        if response.status_code != 200:
+            return False
+        self.SIDX.clear()
+        self.SID.clear()
+        self.ZBraw.clear()
+        self.RequestSENSORS(response.json())
 
     def RequestSENSORS(self,ZBSensors):
          # Break Sensors into a easier format to read/update
+         # SIDx index is between etag (unique sensor MAC codes), and zigbee array ID (SID)
+         # RAW is the original json , SID is the values of the sensors
         for sid in ZBSensors:
             self.SIDX[sid]=ZBSensors[sid]['etag']
             etag=ZBSensors[sid]['etag']
@@ -103,20 +117,23 @@ class ZBsensors:
         Etag=self.SIDX[ZBid]
         return self.SID[Etag]['name']
 
-    def GetSENSOR(self,ZBid):
-        Etag=self.SIDX[ZBid]
-        return self.SID[Etag] 
+    def GetSENSOR(self,ZBmac):  # Return Sensor details based on MAC
+        Etag=self.SIDX[ZBmac]
+        return self.SID[Etag]
 
-    def GetALL(self):       # Return Key,Val list
+    def GetMAC(self,ZBmac):   # Return Sensors MAC id from SID
+        print('ZB:GETMAC:',self.SIDX,':',ZBmac,':',self.SIDX[ZBmac])
+        return self.SIDX[ZBmac]
+
+    def GetALL(self):         # Return Key,Val list
         return self.ZBraw
 
-
-    def Validate(self,ZBid):  # Check if Sensor is set
-        if ZBid in self.SID[ZBid]:
+    def Validate(self,ZBsid):  # Check if Sensor is set, based on Sensor ID in SIDx
+        if ZBsid in self.SIDX:
             return True
         return False
 
-    def UpdSENSOR(self,Sid):
+    def UpdSENSOR(self,Sid):  # Update Sensor base on SID
         ZBid = Sid['id']
         etag=self.SIDX[ZBid]
         if 'lastupdated' in Sid['state']:
@@ -140,6 +157,7 @@ class ZBsensors:
                         Alert("Battery",1,self.ids[sid]['name']+' Sensor  battery @ '+str(self.ids[sid]['config']['battery'])+'%  ['+prvEid+']' )
 
     def configPORT(self):       # Return Socket Port number
+        print(self.ZBconfig)
         if 'websocketport' in self.ZBconfig:
-            return self.ZBconfig[websocketport]
+            return self.ZBconfig['websocketport']
         return 80

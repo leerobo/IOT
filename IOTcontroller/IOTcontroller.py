@@ -138,6 +138,7 @@ def ValidatePARMS():
 def ZBsetup():
     global ZBconfig, ZBsensors, ZBsensorC, LockSys
     LockSys = datetime.datetime.today()
+    print(cntlINI["ZIGBEE"]["ip"],cntlINI["ZIGBEE"]["key"])
     ZBsensorC = ZBsensors(cntlINI["ZIGBEE"]["ip"],cntlINI["ZIGBEE"]["key"])
 
     # params = {"words": 10, "paragraphs": 1, "format": "json"}
@@ -292,18 +293,19 @@ def IOTprintMSG(Sid):
 
 def IOTcntl(Sid):
     global LockSys
-    # print('----Event--------------------------------------------------------')
-    # print(Sid)
-    # print(IOTprintMSG(Sid))
-    # SidID=Sid['id']
-    # if 'state' in Sid :
-    #     ZBsensorC.UpdSENSOR(Sid)
-    # print('-----------------------------------------------------------------')
+    print('----Event--------------------------------------------------------')
+    print('SID:',Sid)
+    print('IOT:',IOTprintMSG(Sid))
+    SidID=Sid['id']
+    if 'state' in Sid :
+        ZBsensorC.UpdSENSOR(Sid)
+    print('-----------------------------------------------------------------',SidID)
 
     if not ZBsensorC.Validate(SidID):
-        ZBsendsorC.RefreshCONFIG()
+        ZBsensorC.RefrestSENSORS()
         if not ZBsensorC.Validate(SidID):
             SendMSG('Unknown Sensor Found')
+            return
         else:
             SendMSG('New Sensor Found')
 
@@ -323,13 +325,12 @@ def IOTcntl(Sid):
 
     # ----------------------- Button Overrides
     if  ZBsensorC.GetTYPE(SidID)=='Button':
-        if 'state' in Sid and 'buttoneevent' in Sid['state']:
+        if 'state' in Sid and 'buttonevent' in Sid['state']:
             if Sid['state']['buttonevent'] == 1002 or Sid['state']['buttonevent'] == 1003:     # Button pressed
                 GPIOpinsC.TOGGLEbyID('bedroom')
             elif Sid['state']['buttonevent']==1004:     # Button double pressed
                 GPIOpinsC.TOGGLEbyID('bathroom')
             LockSys = datetime.datetime.today() + datetime.timedelta(minutes = 1)
-            SendMSG(LockSys.strftime('%H:%M:%S'))
 
     # ----------------------- Auto Controllers
     if LockSys < datetime.datetime.today():
@@ -377,8 +378,7 @@ def main():
     #   Start WebSocket for event actions of sensors
     # ------------------------------------------------------------------------------
     websocket.enableTrace(True)
-    #SendMSG('ZigBee Socket on Port '+str(ZBconfig["websocketport"]))
-    SendMSG('ZigBee Socket on Port '+str(ZBsensorC.configPORT()))
+    SendMSG('ZigBee Socket on Port '+str(ZBsensorC.configPORT()) )
     SendMSG('--------------------------------------------------------------------')
     WBzbIP="ws://"+cntlINI["ZIGBEE"]["ip"]+":"+str(ZBsensorC.configPORT())
     WBws = websocket.WebSocketApp(WBzbIP,
