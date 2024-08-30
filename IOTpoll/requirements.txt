@@ -1,0 +1,3 @@
+wheel>=0.37.1
+prometheus-client>=0.20.0
+RPi.GPIO>=0.7.1
