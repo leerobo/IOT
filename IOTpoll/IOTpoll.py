@@ -23,7 +23,7 @@ import configparser
 import time
 import http.client
 import json
-from ZigBee import ZBsensors
+#from ZigBee import ZBsensors
 
 import os
 import time
@@ -53,10 +53,12 @@ MID='XX'
 def LISTwire1():
     SIDs={}
     devicelist = glob.glob(Ddir+'28*')    
+    print('devicelist:',devicelist)
     if devicelist=='':
         return SIDs
     else:
         for device in devicelist:
+            print(device)
             TT=device.split("/")
             SID = TT[len(TT)-1]
             SIDs['W1_S'+SID[3:]]=GETwire1(TT[len(TT)-1])
@@ -354,7 +356,7 @@ def main():
         print('SID:',SIDs)
 
         PNs=PINpoll()                # Pin Poll 
-        print(PNs)
+        print('PINS:',PNs)
         SIDs = {**SIDs, **PNs}   
 
         if 'ZIGBEE' in configPOLL:   # ZigBee Poll

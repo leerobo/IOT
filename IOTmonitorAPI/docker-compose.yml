@@ -1,0 +1,20 @@
+version: '2'
+services:
+  Vincent:
+    image: iotmonitorapi
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      unsafe-network:
+        aliases:
+          - iotmonitorapi
+      dumb-network:
+        aliases:
+          - iotmonitorapi
+
+networks:
+  dumb-network:
+    driver: bridge
+  unsafe-network:
+    driver: bridge

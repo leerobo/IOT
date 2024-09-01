@@ -1,0 +1,18 @@
+################# IOTmonitorAPI ######### 8000 ##########
+FROM python:3.12.2-slim-bookworm
+
+# Install pip requirements
+WORKDIR /IOTmonitorAPI
+COPY /requirements.txt .
+COPY /README.md .
+RUN python3 -m pip install -r requirements.txt --no-cache-dir
+
+# Package up Folders 
+WORKDIR /IOTmonitorAPI
+COPY /  /IOTmonitorAPI
+
+WORKDIR /IOTmonitorAPI
+# Dev version - Additional Logs
+#CMD ["fastapi","dev","main.py","--host","0.0.0.0"]
+# Live version 
+CMD ["fastapi","run","main.py"]
